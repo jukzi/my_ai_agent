@@ -4404,11 +4404,30 @@
           const msg = state.chat.find(m => m.id === copy.dataset.copyMessage);
           if (!msg) return;
           const text = String(msg.content ?? '');
+          // Copy rendered formatting without copying active elements or attributes.
+          const rendered = copy.closest('.msg-row')?.querySelector('.msg-bubble > .md-body');
+          const formatted = document.createElement('div');
+          const allowed = new Set('P STRONG B EM I H1 H2 H3 BLOCKQUOTE UL OL LI PRE CODE TABLE THEAD TBODY TR TH TD BR'.split(' '));
+          function appendSafe(source, target) {
+            for (const node of source.childNodes) {
+              if (node.nodeType === Node.TEXT_NODE) target.append(node.textContent);
+              else if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.matches('.code-header, script, style, iframe, svg, img')) continue;
+                if (allowed.has(node.tagName)) {
+                  const child = document.createElement(node.tagName.toLowerCase());
+                  appendSafe(node, child);
+                  target.append(child);
+                } else appendSafe(node, target);
+              }
+            }
+          }
+          if (rendered) appendSafe(rendered, formatted);
+          else formatted.textContent = text;
           try {
             if (typeof ClipboardItem === 'function' && navigator.clipboard?.write) {
               await navigator.clipboard.write([new ClipboardItem({
                 'text/plain': new Blob([text], { type: 'text/plain' }),
-                'text/html': new Blob(['<pre>' + escapeHtml(text) + '</pre>'], { type: 'text/html' }),
+                'text/html': new Blob([formatted.innerHTML], { type: 'text/html' }),
               })]);
               toast('Nachricht als Text und HTML kopiert.', 'success');
             } else {
