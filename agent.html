@@ -3867,27 +3867,7 @@
       const oldTop = container.scrollTop;
       const atBottom = container.scrollHeight - container.clientHeight - oldTop <= 24;
       if (!state.chat.length) {
-        container.innerHTML = `
-          <div class="welcome-card">
-            <h1>BrowserCode Agent</h1>
-            <p>Agentic Coding Loop mit dauerhaftem Gedächtnis, Claude-Code-Tools (<code>Read</code>, <code>Write</code>, <code>Edit</code>, <code>Glob</code>, <code>Grep</code>, <code>Bash</code>, <code>TodoWrite</code>) und lokalem Workspace im Browser.</p>
-            ${!state.config.apiKey ? '<p style="color:var(--warn); font-size:12.5px;">Hinweis: Bitte hinterlege zuerst deinen OpenRouter / OpenAI API Key in den <b>Einstellungen</b>.</p>' : ''}
-            <div class="quick-prompts">
-              <button class="quick-prompt" data-prompt="Erstelle eine interaktive HTML/JS-Visualisierung als index_demo.html im Workspace und erkläre mir den Code.">
-                <strong>Web-Demo erstellen</strong>
-                Erstellt eine neue Datei im Workspace
-              </button>
-              <button class="quick-prompt" data-prompt="Erstelle ein modernes SVG-Diagramm (architektur.svg) im Workspace, das einen Agentic Loop zeigt.">
-                <strong>SVG-Grafik generieren</strong>
-                Direkt in der Bildvorschau ansehen
-              </button>
-              <button class="quick-prompt" data-prompt="Liste alle Dateien im Workspace auf, lies die README.md und merke dir im Gedächtnis, dass ich auf Deutsch antworte.">
-                <strong>Workspace &amp; Gedächtnis testen</strong>
-                Nutzt LS, Read &amp; MemoryWrite
-              </button>
-            </div>
-          </div>
-        `;
+        container.replaceChildren();
         return;
       }
 
