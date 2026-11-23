@@ -1415,8 +1415,8 @@
             <span id="apiTokenStatus" class="field-hint" role="status"></span>
           </div>
           <div class="field-row">
-            <label class="field">Input €/Mio. Tokens <input id="cfgInputRate" type="number" min="0" step="any" placeholder="Unbekannt"></label>
-            <label class="field">Output €/Mio. Tokens <input id="cfgOutputRate" type="number" min="0" step="any" placeholder="Unbekannt"></label>
+            <label class="field">Input USD/Mio. Tokens <input id="cfgInputRate" type="number" min="0" step="any" placeholder="Unbekannt"></label>
+            <label class="field">Output USD/Mio. Tokens <input id="cfgOutputRate" type="number" min="0" step="any" placeholder="Unbekannt"></label>
           </div>
           <div class="field-hint">Optionale Schätzpreise für die aktuell eingetragene API-URL und das Modell. Leer = unbekannt.</div>
           <div class="field-row">
@@ -3390,14 +3390,14 @@
       return msgs;
     }
 
-    const usageKey = 'browsercode_session_usage_v1';
-    let usageTotal = {tokens:0, euros:0, unknown:0, missing:0};
+    const usageKey = 'browsercode_session_usage_usd_v1';
+    let usageTotal = {tokens:0, dollars:0, unknown:0, missing:0};
     try { usageTotal = JSON.parse(sessionStorage.getItem(usageKey)) || usageTotal; } catch {}
     function renderUsage() {
       const u = usageTotal;
-      const cost = u.unknown ? (u.euros ? 'ab ' : '') : '≈ ';
+      const cost = u.unknown ? (u.dollars ? 'ab ' : '') : '≈ ';
       $('#sessionUsage').textContent = u.tokens.toLocaleString('de-DE') + (u.missing ? '+ tok' : ' tok') +
-        (u.unknown && !u.euros ? ' · € ?' : ' · ' + cost + u.euros.toLocaleString('de-DE',{maximumFractionDigits:6}) + ' €');
+        (u.unknown && !u.dollars ? ' · USD ?' : ' · ' + cost + u.dollars.toLocaleString('de-DE',{maximumFractionDigits:6}) + ' USD');
     }
     function recordUsage(data, config) {
       const u = data?.usage;
@@ -3405,8 +3405,9 @@
       else if (Number.isFinite(u?.prompt_tokens) && Number.isFinite(u?.completion_tokens)) usageTotal.tokens += u.prompt_tokens + u.completion_tokens;
       else usageTotal.missing++;
       const input = config.inputRate, output = config.outputRate;
-      if (input != null && output != null && Number.isFinite(u?.prompt_tokens) && Number.isFinite(u?.completion_tokens)) {
-        usageTotal.euros += (input * u.prompt_tokens + output * u.completion_tokens) / 1e6;
+      if (config.openRouter && Number.isFinite(u?.cost) && u.cost >= 0) usageTotal.dollars += u.cost;
+      else if (input != null && output != null && Number.isFinite(u?.prompt_tokens) && Number.isFinite(u?.completion_tokens)) {
+        usageTotal.dollars += (input * u.prompt_tokens + output * u.completion_tokens) / 1e6;
       } else usageTotal.unknown++;
       try { sessionStorage.setItem(usageKey, JSON.stringify(usageTotal)); } catch {}
       renderUsage();
@@ -3421,7 +3422,7 @@
         headers['Authorization'] = `Bearer ${state.config.apiKey.trim()}`;
       }
 
-      const rates = state.config.tokenRates?.[JSON.stringify([baseUrl, state.config.model || DEFAULT_CONFIG.model])] || {};
+      const rates = state.config.tokenRatesUsd?.[JSON.stringify([baseUrl, state.config.model || DEFAULT_CONFIG.model])] || {};
       const payload = {
         model: state.config.model || DEFAULT_CONFIG.model,
         messages,
@@ -3440,7 +3441,7 @@
       const text = await res.text();
       let data;
       try { data = JSON.parse(text); } catch { data = null; }
-      if (res.ok) recordUsage(data, rates);
+      if (res.ok) recordUsage(data, { ...rates, openRouter: new URL(url, location.href).origin === 'https://openrouter.ai' });
       if (!res.ok) {
         const errMsg = data?.error?.message || data?.message || text || `HTTP ${res.status}`;
         const err = new Error(errMsg);
@@ -4108,7 +4109,7 @@
     function loadRateFields() {
       const base = ($('#cfgBaseUrl').value.trim() || DEFAULT_CONFIG.baseUrl).replace(/\/+$/, '');
       const model = $('#cfgModel').value.trim() || DEFAULT_CONFIG.model;
-      const rates = state.config.tokenRates?.[JSON.stringify([base, model])];
+      const rates = state.config.tokenRatesUsd?.[JSON.stringify([base, model])];
       $('#cfgInputRate').value = rates?.inputRate ?? '';
       $('#cfgOutputRate').value = rates?.outputRate ?? '';
     }
@@ -4135,7 +4136,7 @@
       state.config.apiKey = $('#cfgApiKey').value.trim();
       state.config.model = $('#cfgModel').value.trim() || DEFAULT_CONFIG.model;
       const rate = id => { const n = $(id).valueAsNumber; return Number.isFinite(n) && n >= 0 ? n : null; };
-      (state.config.tokenRates ||= {})[JSON.stringify([state.config.baseUrl.replace(/\/+$/, ''), state.config.model])] = {
+      (state.config.tokenRatesUsd ||= {})[JSON.stringify([state.config.baseUrl.replace(/\/+$/, ''), state.config.model])] = {
         inputRate: rate('#cfgInputRate'), outputRate: rate('#cfgOutputRate'),
       };
       state.config.maxSteps = Math.max(1, Math.min(50, parseInt($('#cfgMaxSteps').value, 10) || 20));
