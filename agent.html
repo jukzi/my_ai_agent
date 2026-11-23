@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrowserCode — Agentic Coding Workbench</title>
+  <title>MyAiAgent — Agentic Coding Workbench</title>
   <meta name="description" content="Vollständig im Browser laufende Agentic Coding Workbench mit Claude-Code-Tools, Gedächtnis, Workspace, Bildvorschau, GitHub PRs sowie Python-, JavaScript- und Java-Ausführung." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -1292,7 +1292,7 @@
         <button class="btn btn-icon" id="btnToggleSidebar" title="Sidebar ein-/ausblenden" aria-label="Sidebar umschalten">☰</button>
         <div class="brand">
           <div class="brand-mark">&gt;_</div>
-          <span>BrowserCode</span>
+          <span>MyAiAgent</span>
         </div>
         <button class="model-pill" id="btnModelPill" title="API & Modell konfigurieren">
           <span class="status-dot" id="statusDot"></span>
@@ -1579,13 +1579,13 @@
 
     const DEFAULT_WORKSPACE = {
       'README.md': {
-        content: '# Willkommen im BrowserCode Workspace\n\nAlle Dateien hier werden lokal im `localStorage` gespeichert.\n\n- Nutze den Chat, um Dateien zu lesen, zu erstellen, zu bearbeiten oder zu durchsuchen.\n- Ziehe Bilder (`png`, `gif`, `svg`, `jpg`, `webp`) oder Code-Dateien per Drag & Drop in den Workspace oder direkt in den Chat.\n- Aktiviere optionale Tools (**GitHub PRs**, **Python**, **JavaScript**, **Java**) oben in der Leiste oder in den Einstellungen.\n',
+        content: '# Willkommen im MyAiAgent Workspace\n\nAlle Dateien hier werden lokal im `localStorage` gespeichert.\n\n- Nutze den Chat, um Dateien zu lesen, zu erstellen, zu bearbeiten oder zu durchsuchen.\n- Ziehe Bilder (`png`, `gif`, `svg`, `jpg`, `webp`) oder Code-Dateien per Drag & Drop in den Workspace oder direkt in den Chat.\n- Aktiviere optionale Tools (**GitHub PRs**, **Python**, **JavaScript**, **Java**) oben in der Leiste oder in den Einstellungen.\n',
         isBinary: false,
         mime: 'text/markdown',
         updatedAt: Date.now(),
       },
       'demo.svg': {
-        content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 140" width="320" height="140">\n  <rect width="320" height="140" rx="14" fill="#17191c"/>\n  <rect x="16" y="16" width="288" height="108" rx="10" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="6 4"/>\n  <circle cx="64" cy="70" r="24" fill="#10b981" opacity="0.2"/>\n  <circle cx="64" cy="70" r="12" fill="#10b981"/>\n  <text x="106" y="64" fill="#eceff2" font-family="monospace" font-size="16" font-weight="bold">BrowserCode</text>\n  <text x="106" y="86" fill="#9aa2ad" font-family="sans-serif" font-size="12">SVG &amp; Bildvorschau aktiv</text>\n</svg>',
+        content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 140" width="320" height="140">\n  <rect width="320" height="140" rx="14" fill="#17191c"/>\n  <rect x="16" y="16" width="288" height="108" rx="10" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="6 4"/>\n  <circle cx="64" cy="70" r="24" fill="#10b981" opacity="0.2"/>\n  <circle cx="64" cy="70" r="12" fill="#10b981"/>\n  <text x="106" y="64" fill="#eceff2" font-family="monospace" font-size="16" font-weight="bold">MyAiAgent</text>\n  <text x="106" y="86" fill="#9aa2ad" font-family="sans-serif" font-size="12">SVG &amp; Bildvorschau aktiv</text>\n</svg>',
         isBinary: false,
         mime: 'image/svg+xml',
         updatedAt: Date.now(),
@@ -3422,7 +3422,7 @@
         .filter(([, v]) => v).map(([k]) => k).join(', ') || 'keine';
 
       return [
-        'Du bist BrowserCode, ein autonomer Coding-Agent, der vollständig im Browser läuft.',
+        'Du bist MyAiAgent, ein autonomer Coding-Agent, der vollständig im Browser läuft.',
         'Du verfügst über alle Standard-Tools (Read, Write, Edit, MultiEdit, LS, Glob, Grep, Delete, Bash, TodoWrite, NotebookEdit, WebFetch) sowie ein dauerhaftes Gedächtnis (MemoryWrite, MemoryRead, MemoryDelete).',
         `Aktivierte optionale Tools: ${optList}.`,
         '',
