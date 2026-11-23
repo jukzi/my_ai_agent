@@ -3860,7 +3860,7 @@
       let html = out.join('\n');
       html = html.replace(/@@CODEBLOCK_(\d+)@@/g, (_, i) => codeBlocks[Number(i)]);
       if (!math.length) return html;
-      const token = new RegExp(marker + '(\d+)END', 'g');
+      const token = new RegExp(marker + '([0-9]+)END', 'g');
       // Substitute only text nodes; never insert rendered HTML into attributes.
       const template = document.createElement('template');
       template.innerHTML = html;
