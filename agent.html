@@ -932,6 +932,7 @@
       flex-direction: column;
       min-height: 0;
     }
+    .preview-panel:fullscreen { width: 100%; height: 100%; max-width: none; }
     .preview-panel.hidden { display: none; }
 
     .preview-header {
@@ -1245,6 +1246,10 @@
     #cfgModels { position: absolute; top: 100%; left: 0; right: 0; z-index: 2; max-height: 180px; overflow-y: auto; background: var(--bg-panel); color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
     #cfgModels button { display: block; width: 100%; padding: 6px 8px; text-align: left; overflow-wrap: anywhere; }
     #cfgModels button:hover, #cfgModels button:focus-visible { background: var(--bg-hover); }
+    .preview-fullscreen { background: var(--bg-app); }
+    .preview-fullscreen:fullscreen { width:100%; height:100%; max-width:none; }
+    .preview-fullscreen:fullscreen iframe { width:100%; height:calc(100% - 36px) !important; }
+    .preview-fullscreen:fullscreen img { display:block; margin:auto; width:100%; height:calc(100% - 36px); max-height:none !important; object-fit:contain; }
   </style>
 </head>
 <body>
@@ -3807,7 +3812,7 @@
                       </div>
                       <span class="tool-status ${tc.status}">${statusLabel}</span>
                     </div>
-                    ${htmlPreview}
+                    ${htmlPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm" data-fullscreen>Vollbild</button>${htmlPreview}</div>` : ""}
                     <div class="tool-card-body">
                       <div class="tool-section-label">Argumente</div>
                       <div class="tool-pre" data-tool-text="${argsIndex}"></div>
@@ -3815,7 +3820,7 @@
                       <div class="tool-pre" data-tool-text="${resultIndex}"></div>
                       ${inline ? "" : imgPreview}
                     </div>
-                    ${inline ? imgPreview : ""}
+                    ${inline && imgPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm" data-fullscreen>Vollbild</button>${imgPreview}</div>` : ""}
                   </div>
                 `;
               }).join('')}
@@ -3896,6 +3901,7 @@
         actions.push(`<button class="btn btn-sm btn-icon" id="btnZoomIn" title="Vergrößern">+</button>`);
       }
       actions.push(`<button class="btn btn-sm btn-icon" id="btnPreviewDownload" title="Datei herunterladen">↓</button>`);
+      if (mode === "preview" && (isImg || isHtml)) actions.push(`<button type="button" class="btn btn-sm" data-fullscreen="panel">Vollbild</button>`);
       actions.push(`<button class="btn btn-sm btn-icon" id="btnClosePreview" title="Schließen">✕</button>`);
       $('#previewActions').innerHTML = actions.join('');
 
@@ -4133,6 +4139,20 @@
         });
       });
 
+      document.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-fullscreen]');
+        if (!button) return;
+        const target = button.dataset.fullscreen === 'panel' ? $('#previewPanel') : button.closest('.preview-fullscreen');
+        try {
+          if (document.fullscreenElement === target) await document.exitFullscreen();
+          else await target.requestFullscreen();
+        } catch { toast('Vollbild ist in diesem Browser oder dieser Vorschau nicht verfügbar.', 'warn'); }
+      });
+      document.addEventListener('fullscreenchange', () => {
+        for (const button of $$('[data-fullscreen]')) {
+          button.textContent = document.fullscreenElement?.contains(button) ? 'Vollbild beenden' : 'Vollbild';
+        }
+      });
       // Topbar buttons
       $('#btnTheme').addEventListener('click', () => {
         state.config.theme = state.config.theme === 'dark' ? 'light' : 'dark';
