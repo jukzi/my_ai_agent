@@ -1790,7 +1790,7 @@
     let chats, activeChat;
     function loadChats(data) {
       chats = Array.isArray(data?.chats) ? data.chats.filter(c => typeof c?.id === 'string' && typeof c.title === 'string' && Array.isArray(c.messages)) : [];
-      if (!chats.length) chats = [{id:uid('chat'), title:'Bisheriger Chat', messages:Array.isArray(data) ? data : []}];
+      if (!chats.length) chats = [{id:uid('chat'), title:'Chat 1', messages:Array.isArray(data) ? data : []}];
       activeChat = chats.find(c => c.id === data?.active) || chats[0];
       state.chat = activeChat.messages;
     }
@@ -3432,9 +3432,9 @@
     try { usageTotal = JSON.parse(sessionStorage.getItem(usageKey)) || usageTotal; } catch {}
     function renderUsage() {
       const u = usageTotal;
-      const cost = u.unknown ? (u.dollars ? 'ab ' : '') : '≈ ';
+      const cost = 'ca $' + Math.ceil(u.dollars) + (u.unknown ? ' (unvollständig)' : '');
       $('#sessionUsage').textContent = u.tokens.toLocaleString('de-DE') + (u.missing ? '+ tok' : ' tok') +
-        (u.unknown && !u.dollars ? ' · USD ?' : ' · ' + cost + u.dollars.toLocaleString('de-DE',{maximumFractionDigits:6}) + ' USD');
+        (u.unknown && !u.dollars ? ' · $?' : ' · ' + cost);
     }
     const catalogKey = 'browsercode_openrouter_prices_v1';
     const catalogMaxAge = 30 * 24 * 60 * 60 * 1000;
@@ -4340,8 +4340,9 @@
       });
       $('#btnNewChat').addEventListener('click', () => {
         if (state.isRunning) return;
-        const title = prompt('Name für den neuen Chat:', 'Neuer Chat')?.trim();
-        if (!title) return;
+        let number = chats.length + 1;
+        while (chats.some(chat => chat.title === 'Chat ' + number)) number++;
+        const title = 'Chat ' + number;
         const chat = {id:uid('chat'), title, messages:[]};
         chats.push(chat); switchChat(chat);
       });
