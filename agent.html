@@ -1288,6 +1288,9 @@
     .chat-messages > :is(.msg-row, .agent-steps) { flex-shrink: 0; }
   .chat-picker-status { display:inline-flex; align-items:center; gap:5px; }
   </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
+  <style>.md-body .katex-display { overflow-x: auto; overflow-y: hidden; }</style>
 </head>
 <body>
   <div class="app-shell">
@@ -3734,6 +3737,25 @@
         return `@@CODEBLOCK_${idx}@@`;
       });
 
+      // Protect TeX from Markdown transformations, without interpreting inline code.
+      const math = [];
+      let marker = 'MAIAMATH';
+      while (text.includes(marker)) marker += 'X';
+      if (window.katex) {
+        text = text.replace(/@@CODEBLOCK_\d+@@|\x60+[^\n]*?\x60+|(?<!\\)(?:\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([^\n]+?)\\\)|(?<!\$)\$(?![\s$])((?:\\[^\n]|[^$\\\n])+?)(?<!\s)\$(?![\d$]))/g,
+          (source, dollars, brackets, parens, inline) => {
+            const tex = dollars ?? brackets ?? parens ?? inline;
+            if (!tex?.trim() || tex.length > 10000 || tex.includes('@@CODEBLOCK_')) return source;
+            try {
+              const rendered = window.katex.renderToString(tex.trim(), {
+                displayMode: dollars !== undefined || brackets !== undefined,
+                trust: false, throwOnError: true, maxExpand: 200, maxSize: 20,
+              });
+              return marker + (math.push({source, rendered}) - 1) + 'END';
+            } catch { return source; }
+          });
+      }
+
       text = escapeHtml(text);
 
       // Images ![alt](url)
@@ -3823,7 +3845,31 @@
 
       let html = out.join('\n');
       html = html.replace(/@@CODEBLOCK_(\d+)@@/g, (_, i) => codeBlocks[Number(i)]);
-      return html;
+      if (!math.length) return html;
+      const token = new RegExp(marker + '(\d+)END', 'g');
+      // Substitute only text nodes; never insert rendered HTML into attributes.
+      const template = document.createElement('template');
+      template.innerHTML = html;
+      const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode);
+      for (const node of nodes) {
+        const matches = [...node.data.matchAll(token)];
+        if (!matches.length) continue;
+        const fragment = document.createDocumentFragment();
+        let start = 0;
+        for (const match of matches) {
+          const entry = math[Number(match[1])];
+          fragment.append(node.data.slice(start, match.index));
+          const formula = document.createElement('template');
+          formula.innerHTML = entry.rendered;
+          fragment.append(formula.content);
+          start = match.index + match[0].length;
+        }
+        fragment.append(node.data.slice(start));
+        node.replaceWith(fragment);
+      }
+      return template.innerHTML.replace(token, (_, i) => escapeHtml(math[Number(i)].source));
     }
 
     /* =========================================================================
