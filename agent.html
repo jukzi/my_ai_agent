@@ -2321,13 +2321,36 @@
         const startupErrors = [];
         let py;
         try {
-          py = await window.loadPyodide({
-            indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/',
-            stderr: (line) => {
-              startupErrors.push(String(line));
-              if (startupErrors.length > 20) startupErrors.shift();
-            },
-          });
+          const indexURL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
+          let archive;
+          const failures = [];
+          for (const url of [indexURL + 'python_stdlib.zip', 'https://cdn.jsdelivr.net/npm/pyodide@0.26.4/python_stdlib.zip']) {
+            try {
+              const response = await fetch(url, { cache: 'reload', signal: AbortSignal.timeout(30000) });
+              if (!response.ok) throw new Error('HTTP ' + response.status);
+              const bytes = new Uint8Array(await response.arrayBuffer());
+              if (bytes.length < 22 || bytes[0] !== 80 || bytes[1] !== 75 || bytes[2] !== 3 || bytes[3] !== 4) {
+                throw new Error('Antwort ist kein ZIP-Archiv');
+              }
+              archive = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
+              break;
+            } catch (error) {
+              failures.push(url + ': ' + error.message);
+            }
+          }
+          if (!archive) throw new Error('Python-Standardbibliothek konnte nicht geladen werden: ' + failures.join('; '));
+          try {
+            py = await window.loadPyodide({
+              indexURL,
+              stdLibURL: archive,
+              stderr: (line) => {
+                startupErrors.push(String(line));
+                if (startupErrors.length > 20) startupErrors.shift();
+              },
+            });
+          } finally {
+            URL.revokeObjectURL(archive);
+          }
         } catch (error) {
           const detail = startupErrors.join('\n').slice(-4000);
           throw new Error('Python konnte nicht initialisiert werden: ' + (error?.message || String(error)) + (detail ? '\n' + detail : ''), { cause: error });
