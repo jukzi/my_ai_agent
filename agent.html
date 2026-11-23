@@ -1272,6 +1272,8 @@
       .topbar { height: auto; min-height: 50px; flex-wrap: wrap; padding-block: 5px; }
       .topbar-right { flex-wrap: wrap; flex-shrink: 1; }
     }
+    .agent-steps { width:100%; max-width:860px; margin:0 auto; }
+    .agent-steps summary { cursor:pointer; padding-left:16px; color:var(--text-secondary); font-size:12px; }
   </style>
 </head>
 <body>
@@ -3432,8 +3434,8 @@
     try { usageTotal = JSON.parse(sessionStorage.getItem(usageKey)) || usageTotal; } catch {}
     function renderUsage() {
       const u = usageTotal;
-      const cost = 'ca $' + Math.ceil(u.dollars) + (u.unknown ? ' (unvollständig)' : '');
-      $('#sessionUsage').textContent = u.tokens.toLocaleString('de-DE') + (u.missing ? '+ tok' : ' tok') +
+      const cost = 'ca $' + Math.ceil(u.dollars);
+      $('#sessionUsage').textContent = (u.tokens / 1e6).toLocaleString('de-DE', {maximumSignificantDigits:3}) + (u.missing ? '+ Mio. Tokens' : ' Mio. Tokens') +
         (u.unknown && !u.dollars ? ' · $?' : ' · ' + cost);
     }
     const catalogKey = 'browsercode_openrouter_prices_v1';
@@ -3865,7 +3867,7 @@
       }
 
       const toolText = [];
-      container.innerHTML = state.chat.map((m) => {
+      const rows = state.chat.map((m) => {
         const time = new Date(m.timestamp || Date.now()).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
         if (m.role === 'user') {
           const attsHtml = (m.attachments || []).length ? `
@@ -3943,7 +3945,19 @@
             </div>
           `;
         }
-      }).join('');
+      });
+      const expanded = new Set($$('details.agent-steps[open]').map(el => el.dataset.group));
+      const groups = [];
+      for (let i = 0; i < rows.length;) {
+        let j = i + 1;
+        if (state.chat[i].role === 'assistant') while (j < rows.length && state.chat[j].role === 'assistant') j++;
+        if (j > i + 1) {
+          const id = String(state.chat[i].id);
+          groups.push('<details class="agent-steps" data-group="' + escapeHtml(id) + '"' + (expanded.has(id) ? ' open' : '') + '><summary>Frühere Agentenschritte (' + (j - i - 1) + ')</summary>' + rows.slice(i,j-1).join('') + '</details>');
+        }
+        groups.push(rows[j-1]); i=j;
+      }
+      container.innerHTML = groups.join('');
 
       for (const el of container.querySelectorAll('.tool-card-body > [data-tool-text]')) {
         el.textContent = toolText[Number(el.dataset.toolText)] ?? '';
@@ -4302,6 +4316,8 @@
             if (chat !== activeChat && !switchChat(chat)) return;
             const row = $$('[data-search-message]').find(el => el.dataset.searchMessage === m.id);
             const card = toolIndex === undefined ? null : row?.querySelectorAll('.tool-card')[toolIndex];
+            const steps = row?.closest('.agent-steps');
+            if (steps) steps.open = true;
             card?.classList.add('open');
             (card || row)?.scrollIntoView({block:'center'});
           };
