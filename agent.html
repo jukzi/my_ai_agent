@@ -3603,6 +3603,26 @@
       runs.set(chat, run);
       syncRun();
       const status = text => { run.text = text; if (chat === activeChat) syncRun(); };
+      async function request(messages, tools) {
+        const signal = controller.signal;
+        for (let attempt = 0; ; attempt++) {
+          signal.throwIfAborted();
+          try { return await callChatApi(messages, tools, signal); }
+          catch (err) {
+            signal.throwIfAborted();
+            const code = err.status;
+            const transient = code === 408 || code === 429 || (code >= 500 && code <= 599) ||
+              err.name === 'TimeoutError' || (err.name === 'TypeError' && /fetch|network|load failed/i.test(err.message));
+            if (!transient || attempt >= 3) throw err;
+            status('Erneuter API-Versuch ' + (attempt + 1) + '/3 in 3 Sekunden…');
+            await new Promise((resolve, reject) => {
+              const timer = setTimeout(() => { signal.removeEventListener('abort', stop); resolve(); }, 3000);
+              function stop() { clearTimeout(timer); reject(signal.reason); }
+              signal.addEventListener('abort', stop, {once:true});
+            });
+          }
+        }
+      }
       const maxSteps = Math.max(1, Math.min(50, Number(state.config.maxSteps) || 20));
       let includeImages = true;
 
@@ -3614,13 +3634,13 @@
           const tools = getActiveToolDefinitions();
           let data;
           try {
-            data = await callChatApi(buildApiMessages(includeImages), tools, controller.signal);
+            data = await request(buildApiMessages(includeImages), tools);
           } catch (err) {
             // Auto-fallback to text-only if model doesn't support vision/image_url
             if (includeImages && /image|vision|multimodal|content.*array/i.test(err.message || '')) {
               includeImages = false;
               toast('Modell unterstützt keine direkten Bild-Inputs — sende als Text-Referenz.', 'warn');
-              data = await callChatApi(buildApiMessages(false), tools, controller.signal);
+              data = await request(buildApiMessages(false), tools);
             } else {
               throw err;
             }
