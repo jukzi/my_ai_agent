@@ -1822,7 +1822,7 @@
     const saveChat = () => saveLarge(STORAGE_KEYS.CHAT, {chats, active:activeChat.id});
     function chatPicker() {
       const picker = $('#chatPicker');
-      picker.replaceChildren(...chats.map(c => new Option(c.title, c.id)));
+      picker.replaceChildren(...chats.map(c => new Option(c.title + (runs.has(c) ? ' · läuft' : ''), c.id)));
       picker.value = activeChat.id;
     }
     function switchChat(chat) {
@@ -1834,7 +1834,7 @@
       state.pendingAttachments = [];
       renderPendingAttachments();
       renderFileList();
-      saveChat(); chatPicker(); renderChat();
+      saveChat(); syncRun(); renderChat();
       $('#chatMessages').scrollTop = $('#chatMessages').scrollHeight;
       $('#chatInput').dispatchEvent(new Event('input'));
       return true;
@@ -1865,6 +1865,26 @@
     /* =========================================================================
        4. VIRTUAL FILESYSTEM, GLOB, GREP & PURE-JS ZIP BUILDER
        ========================================================================= */
+    function runtime(chat) {
+      const local = {};
+      const shared = state;
+      const stateForChat = new Proxy(shared, {
+        get(target, key) {
+          if (key === 'workspace') return chat.workspace;
+          if (key === 'chat') return chat.messages;
+          if (key === 'pyodide' || key === 'pyodideLoading') return local[key];
+          if (key === 'activeFile' && chat !== activeChat) return null;
+          return target[key];
+        },
+        set(target, key, value) {
+          if (key === 'pyodide' || key === 'pyodideLoading') local[key] = value;
+          else target[key] = value;
+          return true;
+        },
+      });
+      return makeRuntime(stateForChat, chat);
+    }
+    function makeRuntime(state, chat) {
     const VFS = {
       list(prefix = '') {
         const norm = normalizePath(prefix);
@@ -1890,7 +1910,7 @@
           updatedAt: Date.now(),
         };
         saveWorkspace();
-        renderFileList();
+        if (chat === activeChat) renderFileList();
         if (state.activeFile === norm) renderPreview(norm);
         return norm;
       },
@@ -1906,7 +1926,7 @@
         }
         if (removed > 0) {
           saveWorkspace();
-          renderFileList();
+          if (chat === activeChat) renderFileList();
         }
         return removed;
       },
@@ -3463,6 +3483,22 @@
       return msgs;
     }
 
+      return {VFS, GitHub, executeTool, getActiveToolDefinitions, buildApiMessages};
+    }
+    const runtimes = new WeakMap();
+    function toolsFor(chat) {
+      if (!runtimes.has(chat)) runtimes.set(chat, runtime(chat));
+      return runtimes.get(chat);
+    }
+    const VFS = new Proxy({}, {get: (_, key) => toolsFor(activeChat).VFS[key]});
+    const GitHub = new Proxy({}, {get: (_, key) => toolsFor(activeChat).GitHub[key]});
+    const buildApiMessages = (...args) => toolsFor(activeChat).buildApiMessages(...args);
+    const runs = new Map();
+    function syncRun() {
+      const run = runs.get(activeChat);
+      updateRunningUI(Boolean(run || state.isRunning), run?.text || 'Bereit');
+      chatPicker();
+    }
     const usageKey = 'browsercode_session_usage_usd_v1';
     let usageTotal = {tokens:0, dollars:0, unknown:0, missing:0};
     try { usageTotal = JSON.parse(sessionStorage.getItem(usageKey)) || usageTotal; } catch {}
@@ -3555,30 +3591,32 @@
       return data;
     }
 
-    async function runAgentLoop() {
-      if (state.isRunning) return;
-      state.isRunning = true;
-      state.abortController = new AbortController();
-      updateRunningUI(true, 'Denkt nach…');
-
+    async function runAgentLoop(chat = activeChat) {
+      if (runs.has(chat) || state.isRunning) return;
+      const {executeTool, getActiveToolDefinitions, buildApiMessages} = toolsFor(chat);
+      const controller = new AbortController();
+      const run = {controller, text:'Denkt nach…'};
+      runs.set(chat, run);
+      syncRun();
+      const status = text => { run.text = text; if (chat === activeChat) syncRun(); };
       const maxSteps = Math.max(1, Math.min(50, Number(state.config.maxSteps) || 20));
       let includeImages = true;
 
       try {
         for (let step = 1; step <= maxSteps; step++) {
-          if (state.abortController.signal.aborted) break;
-          updateRunningUI(true, `Schritt ${step}/${maxSteps} — Anfrage an ${state.config.model}…`);
+          if (controller.signal.aborted) break;
+          status(`Schritt ${step}/${maxSteps} — Anfrage an ${state.config.model}…`);
 
           const tools = getActiveToolDefinitions();
           let data;
           try {
-            data = await callChatApi(buildApiMessages(includeImages), tools, state.abortController.signal);
+            data = await callChatApi(buildApiMessages(includeImages), tools, controller.signal);
           } catch (err) {
             // Auto-fallback to text-only if model doesn't support vision/image_url
             if (includeImages && /image|vision|multimodal|content.*array/i.test(err.message || '')) {
               includeImages = false;
               toast('Modell unterstützt keine direkten Bild-Inputs — sende als Text-Referenz.', 'warn');
-              data = await callChatApi(buildApiMessages(false), tools, state.abortController.signal);
+              data = await callChatApi(buildApiMessages(false), tools, controller.signal);
             } else {
               throw err;
             }
@@ -3611,9 +3649,9 @@
             timestamp: Date.now(),
           };
 
-          state.chat.push(assistantEntry);
+          chat.messages.push(assistantEntry);
           saveChat();
-          renderChat();
+          if (chat === activeChat) renderChat();
 
           if (!assistantEntry.tool_calls.length) {
             break; // Final answer reached
@@ -3621,8 +3659,8 @@
 
           // Execute each tool call
           for (const tc of assistantEntry.tool_calls) {
-            if (state.abortController.signal.aborted) break;
-            updateRunningUI(true, `Führt Tool aus: ${tc.name}…`);
+            if (controller.signal.aborted) break;
+            status(`Führt Tool aus: ${tc.name}…`);
             const t0 = performance.now();
             try {
               const out = await executeTool(tc.name, tc.args);
@@ -3635,14 +3673,14 @@
             }
             tc.durationMs = Math.round(performance.now() - t0);
             saveChat();
-            renderChat();
+            if (chat === activeChat) renderChat();
           }
         }
       } catch (err) {
         if (err.name === 'AbortError') {
           toast('Agent-Durchlauf abgebrochen.', 'warn');
         } else {
-          state.chat.push({
+          chat.messages.push({
             id: uid('msg'),
             role: 'assistant',
             retryable: true,
@@ -3651,13 +3689,12 @@
             timestamp: Date.now(),
           });
           saveChat();
-          renderChat();
+          if (chat === activeChat) renderChat();
           toast(err.message, 'error');
         }
       } finally {
-        state.isRunning = false;
-        state.abortController = null;
-        updateRunningUI(false, 'Bereit');
+        runs.delete(chat);
+        syncRun();
       }
     }
 
@@ -4176,7 +4213,7 @@
        13. SEND MESSAGE FLOW
        ========================================================================= */
     async function sendUserMessage(overrideText = null) {
-      if (state.isRunning) return;
+      if (state.isRunning || runs.has(activeChat)) return;
       const input = $('#chatInput');
       const text = overrideText !== null ? overrideText.trim() : input.value.trim();
       const atts = [...state.pendingAttachments];
@@ -4375,7 +4412,7 @@
         if (button) VFS.downloadFile(button.dataset.previewDownload);
       });
       $('#summarizeChat').addEventListener('click', async () => {
-        if (state.isRunning) return;
+        if (state.isRunning || runs.size) return;
         if (!state.chat.length || state.chat.at(-1)?.contextSummary) {
           toast('Kein neuer Chatverlauf zum Zusammenfassen.', 'info'); return;
         }
@@ -4590,7 +4627,7 @@
         try {
           const data = JSON.parse(await file.text());
           if (data.config) state.config = { ...structuredClone(DEFAULT_CONFIG), ...data.config };
-          if (state.isRunning) throw new Error("Bitte zuerst den Agenten stoppen.");
+          if (state.isRunning || runs.size) throw new Error("Bitte zuerst den Agenten stoppen.");
           closePreview();
           if (data.chatCollection || Array.isArray(data.chat)) { loadChats(data.chatCollection || data.chat, data.workspace || {}); chatPicker(); }
           else if (data.workspace) state.workspace = activeChat.workspace = data.workspace;
@@ -4607,7 +4644,7 @@
       });
       $('#btnResetAll').addEventListener('click', async () => {
         if (!confirm('Wirklich ALLES (Workspace, Chat, Gedächtnis, Konfiguration) zurücksetzen?')) return;
-        if (state.isRunning) { toast('Bitte stoppe zuerst den Agenten.', 'warn'); return; }
+        if (state.isRunning || runs.size) { toast('Bitte stoppe zuerst den Agenten.', 'warn'); return; }
         try { await largeTransaction('readwrite', store => store.clear()); }
         catch { toast('IndexedDB konnte nicht geleert werden.', 'error'); return; }
         for (const k of Object.values(STORAGE_KEYS)) localStorage.removeItem(k);
@@ -4743,7 +4780,7 @@
 
       $('#btnSend').addEventListener('click', () => { historyIndex = -1; sendUserMessage(); });
       $('#btnNewChat').addEventListener('click', () => { historyIndex = -1; });
-      $('#btnStop').addEventListener('click', () => state.abortController?.abort());
+      $('#btnStop').addEventListener('click', () => (runs.get(activeChat)?.controller || state.abortController)?.abort());
       $('#btnAttachChat').addEventListener('click', () => $('#inputAttachChat').click());
       $('#inputAttachChat').addEventListener('change', (e) => {
         if (e.target.files?.length) handleChatAttach(e.target.files);
@@ -4775,7 +4812,7 @@
       }, { passive: true });
       $('#chatMessages').addEventListener('click', async (e) => {
         if (e.target.closest('[data-retry-chat]')) {
-          if (state.isRunning || !state.chat.at(-1)?.retryable) return;
+          if (state.isRunning || runs.has(activeChat) || !state.chat.at(-1)?.retryable) return;
           state.chat.pop();
           saveChat();
           renderChat();
