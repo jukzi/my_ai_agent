@@ -1,0 +1,4222 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrowserCode — Agentic Coding Workbench</title>
+  <meta name="description" content="Vollständig im Browser laufende Agentic Coding Workbench mit Claude-Code-Tools, Gedächtnis, Workspace, Bildvorschau, GitHub PRs sowie Python-, JavaScript- und Java-Ausführung." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+      /* Dark theme (warm charcoal & emerald) */
+      --bg-app: #111315;
+      --bg-panel: #17191c;
+      --bg-elevated: #1e2126;
+      --bg-hover: #262a30;
+      --bg-input: #141619;
+      --bg-code: #0d0f11;
+
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.15);
+
+      --text-primary: #eceff2;
+      --text-secondary: #9aa2ad;
+      --text-muted: #68707c;
+
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --accent-soft: rgba(16, 185, 129, 0.14);
+      --accent-text: #34d399;
+
+      --warn: #f59e0b;
+      --warn-soft: rgba(245, 158, 11, 0.14);
+      --danger: #ef4444;
+      --danger-soft: rgba(239, 68, 68, 0.14);
+      --info: #38bdf8;
+      --info-soft: rgba(56, 189, 248, 0.14);
+
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+      --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+
+      --checker-a: #1a1d21;
+      --checker-b: #23272d;
+    }
+
+    [data-theme="light"] {
+      --bg-app: #f3f4f6;
+      --bg-panel: #ffffff;
+      --bg-elevated: #f8f9fa;
+      --bg-hover: #eef0f3;
+      --bg-input: #ffffff;
+      --bg-code: #f5f6f8;
+
+      --border-subtle: rgba(15, 23, 42, 0.09);
+      --border-strong: rgba(15, 23, 42, 0.18);
+
+      --text-primary: #14171a;
+      --text-secondary: #4b5563;
+      --text-muted: #828b97;
+
+      --accent: #059669;
+      --accent-hover: #047857;
+      --accent-soft: rgba(5, 150, 105, 0.11);
+      --accent-text: #047857;
+
+      --warn: #d97706;
+      --warn-soft: rgba(217, 119, 6, 0.12);
+      --danger: #dc2626;
+      --danger-soft: rgba(220, 38, 38, 0.1);
+      --info: #0284c7;
+      --info-soft: rgba(2, 132, 199, 0.1);
+
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+      --shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.16);
+
+      --checker-a: #eceef1;
+      --checker-b: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text-primary);
+      background: var(--bg-app);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    button, input, textarea, select {
+      font-family: inherit;
+      font-size: inherit;
+      color: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      background: transparent;
+    }
+
+    /* App Shell */
+    .app-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Top Header */
+    .topbar {
+      height: 50px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-subtle);
+      gap: 12px;
+      z-index: 20;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 14.5px;
+      letter-spacing: -0.015em;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      background: var(--accent);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 13px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .model-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 99px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .model-pill:hover {
+      background: var(--bg-hover);
+      border-color: var(--border-strong);
+      color: var(--text-primary);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    .status-dot.warn { background: var(--warn); }
+    .status-dot.busy {
+      background: var(--warn);
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.85); }
+    }
+
+    .topbar-center {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+    }
+
+    .tool-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 500;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .tool-badge.active {
+      background: var(--accent-soft);
+      border-color: transparent;
+      color: var(--accent-text);
+    }
+    .tool-badge:hover {
+      border-color: var(--border-strong);
+      color: var(--text-primary);
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 32px;
+      padding: 0 11px;
+      border-radius: var(--radius-sm);
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: transparent;
+      border: 1px solid transparent;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .btn-outline {
+      border-color: var(--border-subtle);
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+    .btn-outline:hover {
+      border-color: var(--border-strong);
+      background: var(--bg-hover);
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #ffffff;
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      color: #ffffff;
+    }
+    .btn-danger {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+    .btn-danger:hover {
+      background: var(--danger);
+      color: #ffffff;
+    }
+    .btn-icon {
+      width: 32px;
+      padding: 0;
+    }
+    .btn-sm {
+      height: 26px;
+      padding: 0 8px;
+      font-size: 12px;
+    }
+    .btn-sm.btn-icon { width: 26px; padding: 0; }
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* Main 3-pane Workspace */
+    .workbench {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Left Sidebar */
+    .sidebar {
+      width: 280px;
+      min-width: 220px;
+      max-width: 420px;
+      flex-shrink: 0;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      transition: width 0.15s ease;
+    }
+    .sidebar.collapsed {
+      display: none;
+    }
+
+    .sidebar-tabs {
+      display: flex;
+      padding: 8px 8px 0;
+      gap: 4px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .sidebar-tab {
+      flex: 1;
+      padding: 7px 6px 9px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border-bottom: 2px solid transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .sidebar-tab:hover { color: var(--text-primary); }
+    .sidebar-tab.active {
+      color: var(--text-primary);
+      border-bottom-color: var(--accent);
+    }
+    .tab-count {
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+      padding: 1px 5px;
+      border-radius: 99px;
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+    }
+
+    .sidebar-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border-subtle);
+      gap: 4px;
+    }
+    .sidebar-toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px;
+      min-height: 0;
+      position: relative;
+    }
+
+    .drop-active {
+      outline: 2px dashed var(--accent) !important;
+      outline-offset: -4px;
+      background: var(--accent-soft) !important;
+    }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: background 0.12s, color 0.12s;
+      user-select: none;
+    }
+    .file-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .file-item.active {
+      background: var(--accent-soft);
+      color: var(--accent-text);
+    }
+    .file-icon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      opacity: 0.85;
+    }
+    .file-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .file-meta {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      flex-shrink: 0;
+    }
+    .file-actions {
+      display: none;
+      align-items: center;
+      gap: 2px;
+    }
+    .file-item:hover .file-actions { display: flex; }
+    .file-item:hover .file-meta { display: none; }
+
+    .empty-state {
+      text-align: center;
+      padding: 28px 14px;
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.6;
+    }
+
+    /* Storage Meter */
+    .sidebar-footer {
+      padding: 8px 10px;
+      border-top: 1px solid var(--border-subtle);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .storage-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-family: var(--font-mono);
+    }
+    .storage-bar {
+      height: 4px;
+      border-radius: 99px;
+      background: var(--bg-elevated);
+      overflow: hidden;
+    }
+    .storage-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 99px;
+      transition: width 0.25s;
+    }
+    .storage-fill.warn { background: var(--warn); }
+    .storage-fill.danger { background: var(--danger); }
+
+    /* Memory & Todo Items */
+    .memory-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      margin-bottom: 6px;
+    }
+    .memory-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .memory-key {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--accent-text);
+      word-break: break-all;
+    }
+    .memory-val {
+      font-size: 12px;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .todo-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 7px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      margin-bottom: 6px;
+      font-size: 12.5px;
+    }
+    .todo-badge {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      padding: 2px 6px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      text-transform: uppercase;
+    }
+    .todo-badge.pending { background: var(--bg-hover); color: var(--text-muted); }
+    .todo-badge.in_progress { background: var(--warn-soft); color: var(--warn); }
+    .todo-badge.completed { background: var(--accent-soft); color: var(--accent-text); }
+
+    /* Center Chat Panel */
+    .chat-panel {
+      flex: 1;
+      min-width: 320px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--bg-app);
+      position: relative;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 18px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .welcome-card {
+      max-width: 680px;
+      margin: auto;
+      padding: 28px 24px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+    }
+    .welcome-card h1 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+    .welcome-card p {
+      color: var(--text-secondary);
+      font-size: 13.5px;
+      margin-bottom: 16px;
+    }
+    .quick-prompts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 8px;
+    }
+    .quick-prompt {
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 12.5px;
+      transition: all 0.15s;
+    }
+    .quick-prompt:hover {
+      border-color: var(--border-strong);
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+    .quick-prompt strong {
+      display: block;
+      color: var(--text-primary);
+      font-size: 12.5px;
+      margin-bottom: 2px;
+    }
+
+    .msg-row {
+      display: flex;
+      flex-direction: column;
+      max-width: 860px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .msg-row.user { align-items: flex-end; }
+    .msg-row.assistant { align-items: flex-start; }
+
+    .msg-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 2px;
+    }
+
+    .msg-bubble {
+      padding: 11px 15px;
+      border-radius: var(--radius-md);
+      max-width: 100%;
+      word-break: break-word;
+    }
+    .msg-row.user .msg-bubble {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-strong);
+      max-width: 88%;
+    }
+    .msg-row.assistant .msg-bubble {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      width: 100%;
+    }
+
+    /* Markdown inside messages */
+    .md-body p { margin-bottom: 8px; }
+    .md-body p:last-child { margin-bottom: 0; }
+    .md-body h1, .md-body h2, .md-body h3 {
+      margin: 14px 0 6px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+    }
+    .md-body h1 { font-size: 17px; }
+    .md-body h2 { font-size: 15.5px; }
+    .md-body h3 { font-size: 14px; }
+    .md-body ul, .md-body ol {
+      margin: 6px 0 10px 20px;
+    }
+    .md-body li { margin-bottom: 3px; }
+    .md-body blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 12px;
+      color: var(--text-secondary);
+      margin: 8px 0;
+    }
+    .md-body code {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      background: var(--bg-code);
+      padding: 1.5px 5px;
+      border-radius: 4px;
+      border: 1px solid var(--border-subtle);
+    }
+    .md-body pre {
+      margin: 10px 0;
+      border-radius: var(--radius-sm);
+      background: var(--bg-code);
+      border: 1px solid var(--border-subtle);
+      overflow: hidden;
+    }
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 10px;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border-subtle);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .md-body pre code {
+      display: block;
+      padding: 10px 12px;
+      overflow-x: auto;
+      border: none;
+      background: transparent;
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+    .md-body a {
+      color: var(--accent-text);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .md-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 12.5px;
+    }
+    .md-body th, .md-body td {
+      border: 1px solid var(--border-subtle);
+      padding: 6px 8px;
+      text-align: left;
+    }
+    .md-body th { background: var(--bg-elevated); font-weight: 600; }
+    .md-body img {
+      max-width: 100%;
+      max-height: 360px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+      cursor: zoom-in;
+      margin: 6px 0;
+      display: block;
+    }
+
+    /* Chat attachments inside message */
+    .msg-attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .msg-att-img {
+      max-width: 240px;
+      max-height: 180px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+      cursor: zoom-in;
+      object-fit: contain;
+      background: repeating-conic-gradient(var(--checker-a) 0% 25%, var(--checker-b) 0% 50%) 50% / 14px 14px;
+    }
+    .msg-att-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .msg-att-chip:hover { color: var(--text-primary); border-color: var(--border-strong); }
+
+    /* Tool Call Cards */
+    .tool-calls-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+      width: 100%;
+    }
+    .tool-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      font-size: 12.5px;
+    }
+    .tool-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      cursor: pointer;
+      gap: 8px;
+      user-select: none;
+    }
+    .tool-card-head:hover { background: var(--bg-hover); }
+    .tool-card-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .tool-name {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+    .tool-summary {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tool-status {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .tool-status.running { background: var(--warn-soft); color: var(--warn); }
+    .tool-status.ok { background: var(--accent-soft); color: var(--accent-text); }
+    .tool-status.error { background: var(--danger-soft); color: var(--danger); }
+
+    .tool-card-body {
+      display: none;
+      border-top: 1px solid var(--border-subtle);
+      padding: 8px 10px;
+      background: var(--bg-code);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      max-height: 320px;
+      overflow: auto;
+    }
+    .tool-card.open .tool-card-body { display: block; }
+    .tool-section-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin: 4px 0;
+    }
+    .tool-pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    /* Composer */
+    .composer-wrap {
+      padding: 10px 18px 16px;
+      background: var(--bg-app);
+      border-top: 1px solid var(--border-subtle);
+    }
+    .composer-box {
+      max-width: 860px;
+      margin: 0 auto;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      padding: 8px 10px;
+      transition: border-color 0.15s;
+    }
+    .composer-box:focus-within {
+      border-color: var(--accent);
+    }
+
+    .composer-attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .composer-attachments:empty { display: none; }
+    .pending-att {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px 3px 4px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      font-size: 11.5px;
+      font-family: var(--font-mono);
+    }
+    .pending-att img {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      object-fit: cover;
+    }
+    .pending-att button {
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    .pending-att button:hover { color: var(--danger); }
+
+    .composer-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .composer-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      min-height: 26px;
+      max-height: 180px;
+      line-height: 1.5;
+      padding: 3px 2px;
+      color: var(--text-primary);
+    }
+    .composer-input::placeholder { color: var(--text-muted); }
+
+    .composer-hint {
+      max-width: 860px;
+      margin: 5px auto 0;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 0 2px;
+    }
+
+    /* Right Editor / Preview Panel */
+    .preview-panel {
+      width: 44%;
+      min-width: 300px;
+      max-width: 720px;
+      flex-shrink: 0;
+      background: var(--bg-panel);
+      border-left: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .preview-panel.hidden { display: none; }
+
+    .preview-header {
+      height: 42px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .preview-title {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .preview-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .preview-body {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .code-editor {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      background: var(--bg-code);
+      color: var(--text-primary);
+      border: none;
+      outline: none;
+      resize: none;
+      padding: 14px 16px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.6;
+      tab-size: 2;
+    }
+
+    .image-stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow: auto;
+      background: repeating-conic-gradient(var(--checker-a) 0% 25%, var(--checker-b) 0% 50%) 50% / 18px 18px;
+    }
+    .image-stage img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 4px;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.15s;
+    }
+    .image-info-bar {
+      padding: 7px 12px;
+      border-top: 1px solid var(--border-subtle);
+      background: var(--bg-elevated);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .html-sandbox {
+      flex: 1;
+      width: 100%;
+      border: none;
+      background: #ffffff;
+    }
+
+    .md-preview-pane {
+      padding: 18px 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    /* Modals */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.62);
+      backdrop-filter: blur(3px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      width: 100%;
+      max-width: 600px;
+      max-height: 90vh;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .modal-head {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-head h2 {
+      font-size: 15.5px;
+      font-weight: 600;
+    }
+    .modal-body {
+      padding: 16px 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .modal-foot {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      background: var(--bg-elevated);
+    }
+
+    .form-section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .form-section-title {
+      font-size: 11.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .field label {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+    .field input[type="text"],
+    .field input[type="password"],
+    .field input[type="number"],
+    .field textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+    }
+    .field input:focus, .field textarea:focus {
+      border-color: var(--accent);
+    }
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .field-hint {
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    /* Checkboxes for Optional Tools */
+    .tool-toggle {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .tool-toggle:hover { border-color: var(--border-strong); }
+    .tool-toggle input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin-top: 2px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .tool-toggle-text strong {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tool-toggle-text span {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .github-subfields {
+      margin-left: 26px;
+      padding: 10px 12px;
+      border-left: 2px solid var(--accent);
+      background: var(--bg-input);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .github-subfields.hidden { display: none; }
+
+    /* Lightbox */
+    .lightbox-img {
+      max-width: 92vw;
+      max-height: 88vh;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+      background: repeating-conic-gradient(var(--checker-a) 0% 25%, var(--checker-b) 0% 50%) 50% / 18px 18px;
+    }
+
+    /* Toasts */
+    .toast-container {
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 9px 14px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+      font-size: 12.5px;
+      box-shadow: var(--shadow-lg);
+      animation: slideIn 0.2s ease;
+      pointer-events: auto;
+      max-width: 340px;
+    }
+    .toast.success { border-left: 3px solid var(--accent); }
+    .toast.error { border-left: 3px solid var(--danger); }
+    .toast.warn { border-left: 3px solid var(--warn); }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Responsive */
+    @media (max-width: 960px) {
+      .topbar-center { display: none; }
+      .preview-panel {
+        position: fixed;
+        right: 0;
+        top: 50px;
+        bottom: 0;
+        width: 92vw;
+        max-width: 520px;
+        z-index: 40;
+        box-shadow: var(--shadow-lg);
+      }
+    }
+    @media (max-width: 700px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 50px;
+        bottom: 0;
+        z-index: 40;
+        box-shadow: var(--shadow-lg);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Header -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="btn btn-icon" id="btnToggleSidebar" title="Sidebar ein-/ausblenden" aria-label="Sidebar umschalten">☰</button>
+        <div class="brand">
+          <div class="brand-mark">&gt;_</div>
+          <span>BrowserCode</span>
+        </div>
+        <button class="model-pill" id="btnModelPill" title="API & Modell konfigurieren">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="modelLabel">mistralai/mistral-nemo</span>
+        </button>
+      </div>
+
+      <div class="topbar-center" id="optionalToolsBar" title="Optionale Tools aktivieren/deaktivieren">
+        <button class="tool-badge" data-opt="github" id="badgeGithub">GitHub PRs</button>
+        <button class="tool-badge" data-opt="python" id="badgePython">Python</button>
+        <button class="tool-badge" data-opt="javascript" id="badgeJS">JavaScript</button>
+        <button class="tool-badge" data-opt="java" id="badgeJava">Java</button>
+      </div>
+
+      <div class="topbar-right">
+        <button class="btn btn-outline btn-sm" id="btnNewChat" title="Neuen Chat starten (Workspace & Gedächtnis bleiben erhalten)">Neuer Chat</button>
+        <button class="btn btn-icon" id="btnTheme" title="Hell/Dunkel umschalten" aria-label="Theme umschalten">☀</button>
+        <button class="btn btn-outline btn-sm" id="btnSettings">Einstellungen</button>
+      </div>
+    </header>
+
+    <!-- Main Workbench -->
+    <div class="workbench">
+      <!-- Left Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab active" data-tab="files">Dateien <span class="tab-count" id="countFiles">0</span></button>
+          <button class="sidebar-tab" data-tab="memory">Gedächtnis <span class="tab-count" id="countMemory">0</span></button>
+          <button class="sidebar-tab" data-tab="todos">Aufgaben <span class="tab-count" id="countTodos">0</span></button>
+        </div>
+
+        <!-- Files Tab -->
+        <div id="tabFiles" style="display:flex; flex-direction:column; flex:1; min-height:0;">
+          <div class="sidebar-toolbar">
+            <div class="sidebar-toolbar-group">
+              <button class="btn btn-sm btn-outline" id="btnNewFile" title="Neue Datei erstellen">+ Datei</button>
+              <button class="btn btn-sm btn-outline" id="btnUploadWs" title="Dateien in den Workspace hochladen">↑ Upload</button>
+              <input type="file" id="inputUploadWs" multiple hidden />
+            </div>
+            <div class="sidebar-toolbar-group">
+              <button class="btn btn-sm btn-icon" id="btnDownloadZip" title="Gesamten Workspace als ZIP herunterladen">↓</button>
+              <button class="btn btn-sm btn-icon" id="btnClearWs" title="Workspace leeren">🗑</button>
+            </div>
+          </div>
+          <div class="sidebar-content" id="fileList"></div>
+        </div>
+
+        <!-- Memory Tab -->
+        <div id="tabMemory" style="display:none; flex-direction:column; flex:1; min-height:0;">
+          <div class="sidebar-toolbar">
+            <button class="btn btn-sm btn-outline" id="btnAddMemory">+ Eintrag</button>
+            <button class="btn btn-sm btn-icon" id="btnClearMemory" title="Gedächtnis leeren">🗑</button>
+          </div>
+          <div class="sidebar-content" id="memoryList"></div>
+        </div>
+
+        <!-- Todos Tab -->
+        <div id="tabTodos" style="display:none; flex-direction:column; flex:1; min-height:0;">
+          <div class="sidebar-toolbar">
+            <span style="font-size:11.5px; color:var(--text-muted);">Agent-Aufgabenliste</span>
+            <button class="btn btn-sm btn-icon" id="btnClearTodos" title="Aufgaben leeren">🗑</button>
+          </div>
+          <div class="sidebar-content" id="todoList"></div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="storage-row">
+            <span>localStorage</span>
+            <span id="storageText">0 KB</span>
+          </div>
+          <div class="storage-bar">
+            <div class="storage-fill" id="storageFill" style="width: 0%;"></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center Chat Panel -->
+      <main class="chat-panel" id="chatPanel">
+        <div class="chat-messages" id="chatMessages"></div>
+
+        <div class="composer-wrap">
+          <div class="composer-box" id="composerBox">
+            <div class="composer-attachments" id="composerAttachments"></div>
+            <div class="composer-row">
+              <button class="btn btn-icon" id="btnAttachChat" title="Datei oder Bild in den Chat hochladen">📎</button>
+              <input type="file" id="inputAttachChat" multiple hidden />
+              <textarea
+                id="chatInput"
+                class="composer-input"
+                rows="1"
+                placeholder="Nachricht eingeben… (Enter zum Senden, Shift+Enter für Zeilenumbruch, Bilder einfügen per Strg+V)"
+              ></textarea>
+              <button class="btn btn-primary" id="btnSend">Senden</button>
+              <button class="btn btn-danger" id="btnStop" style="display:none;">Stopp</button>
+            </div>
+          </div>
+          <div class="composer-hint">
+            <span id="agentStatusText">Bereit</span>
+            <span>Enter = Senden · Shift+Enter = Neue Zeile · Drag &amp; Drop unterstützt</span>
+          </div>
+        </div>
+      </main>
+
+      <!-- Right File Viewer / Editor -->
+      <section class="preview-panel hidden" id="previewPanel">
+        <div class="preview-header">
+          <span class="preview-title" id="previewTitle">Datei</span>
+          <div class="preview-actions" id="previewActions"></div>
+        </div>
+        <div class="preview-body" id="previewBody"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-backdrop" id="settingsModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="modal-head">
+        <h2 id="settingsTitle">Einstellungen &amp; Werkzeuge</h2>
+        <button class="btn btn-icon" id="btnCloseSettings" aria-label="Schließen">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- API Provider -->
+        <div class="form-section">
+          <div class="form-section-title">OpenAI-kompatibler API-Provider</div>
+          <div class="field">
+            <label for="cfgBaseUrl">API Base URL</label>
+            <input type="text" id="cfgBaseUrl" placeholder="https://openrouter.ai/api/v1" />
+          </div>
+          <div class="field">
+            <label for="cfgApiKey">API Key</label>
+            <input type="password" id="cfgApiKey" placeholder="sk-or-v1-..." autocomplete="off" />
+            <span class="field-hint">Wird ausschließlich lokal im <code>localStorage</code> deines Browsers gespeichert.</span>
+          </div>
+          <div class="field">
+            <label for="cfgModel">Modell</label>
+            <input type="text" id="cfgModel" placeholder="mistralai/mistral-nemo" />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="cfgMaxSteps">Max. Agent-Schritte</label>
+              <input type="number" id="cfgMaxSteps" min="1" max="50" value="20" />
+            </div>
+            <div class="field">
+              <label for="cfgTemp">Temperatur</label>
+              <input type="number" id="cfgTemp" min="0" max="2" step="0.1" value="0.2" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="cfgSystemPrompt">Zusätzlicher System-Prompt (optional)</label>
+            <textarea id="cfgSystemPrompt" rows="2" placeholder="z. B. Antworte immer auf Deutsch und schreibe sauberen Code."></textarea>
+          </div>
+        </div>
+
+        <!-- Optional Tools -->
+        <div class="form-section">
+          <div class="form-section-title">Optionale Tools</div>
+
+          <label class="tool-toggle">
+            <input type="checkbox" id="optGithub" />
+            <div class="tool-toggle-text">
+              <strong>GitHub Schreibzugriff (PRs) via Token</strong>
+              <span>Branches erstellen, Dateien aus dem Workspace committen und Pull Requests über die GitHub REST API öffnen.</span>
+            </div>
+          </label>
+          <div class="github-subfields hidden" id="githubSubfields">
+            <div class="field">
+              <label for="cfgGithubToken">GitHub Personal Access Token</label>
+              <input type="password" id="cfgGithubToken" placeholder="ghp_... oder github_pat_..." autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="cfgGithubRepo">Standard-Repository (owner/repo)</label>
+              <input type="text" id="cfgGithubRepo" placeholder="mein-user/mein-repo" />
+            </div>
+          </div>
+
+          <label class="tool-toggle">
+            <input type="checkbox" id="optPython" />
+            <div class="tool-toggle-text">
+              <strong>Python ausführen (Pyodide WebAssembly)</strong>
+              <span>Echtes Python 3 im Browser mit bidirektionaler Workspace-Synchronisierung (inkl. erzeugter Bilder/Dateien).</span>
+            </div>
+          </label>
+
+          <label class="tool-toggle">
+            <input type="checkbox" id="optJavascript" />
+            <div class="tool-toggle-text">
+              <strong>JavaScript ausführen</strong>
+              <span>Führt JavaScript in einer Browser-Sandbox aus (mit <code>console</code>-Capture und <code>workspace</code>-API).</span>
+            </div>
+          </label>
+
+          <label class="tool-toggle">
+            <input type="checkbox" id="optJava" />
+            <div class="tool-toggle-text">
+              <strong>Java ausführen</strong>
+              <span>Führt Java-Programme direkt im Browser aus (Klassen, Methoden, <code>System.out</code>, Collections, <code>Math</code>, Workspace-I/O).</span>
+            </div>
+          </label>
+        </div>
+
+        <!-- Backup & Reset -->
+        <div class="form-section">
+          <div class="form-section-title">Speicher &amp; Backup (localStorage)</div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <button class="btn btn-outline btn-sm" id="btnExportBackup">Backup exportieren (.json)</button>
+            <button class="btn btn-outline btn-sm" id="btnImportBackup">Backup importieren</button>
+            <input type="file" id="inputImportBackup" accept=".json" hidden />
+            <button class="btn btn-danger btn-sm" id="btnResetAll">Alles zurücksetzen</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" id="btnCancelSettings">Abbrechen</button>
+        <button class="btn btn-primary" id="btnSaveSettings">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lightbox Modal -->
+  <div class="modal-backdrop" id="lightboxModal">
+    <img id="lightboxImg" class="lightbox-img" alt="Bildvorschau" />
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+  (() => {
+    'use strict';
+
+    /* =========================================================================
+       1. CONSTANTS & DEFAULT STATE
+       ========================================================================= */
+    const STORAGE_KEYS = {
+      CONFIG: 'browsercode_config_v1',
+      WORKSPACE: 'browsercode_workspace_v1',
+      CHAT: 'browsercode_chat_v1',
+      MEMORY: 'browsercode_memory_v1',
+      TODOS: 'browsercode_todos_v1',
+    };
+
+    const DEFAULT_CONFIG = {
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: '',
+      model: 'mistralai/mistral-nemo',
+      maxSteps: 20,
+      temperature: 0.2,
+      systemPrompt: '',
+      theme: 'dark',
+      optionalTools: {
+        github: false,
+        python: false,
+        javascript: false,
+        java: false,
+      },
+      githubToken: '',
+      githubRepo: '',
+    };
+
+    const DEFAULT_WORKSPACE = {
+      'README.md': {
+        content: '# Willkommen im BrowserCode Workspace\n\nAlle Dateien hier werden lokal im `localStorage` gespeichert.\n\n- Nutze den Chat, um Dateien zu lesen, zu erstellen, zu bearbeiten oder zu durchsuchen.\n- Ziehe Bilder (`png`, `gif`, `svg`, `jpg`, `webp`) oder Code-Dateien per Drag & Drop in den Workspace oder direkt in den Chat.\n- Aktiviere optionale Tools (**GitHub PRs**, **Python**, **JavaScript**, **Java**) oben in der Leiste oder in den Einstellungen.\n',
+        isBinary: false,
+        mime: 'text/markdown',
+        updatedAt: Date.now(),
+      },
+      'demo.svg': {
+        content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 140" width="320" height="140">\n  <rect width="320" height="140" rx="14" fill="#17191c"/>\n  <rect x="16" y="16" width="288" height="108" rx="10" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="6 4"/>\n  <circle cx="64" cy="70" r="24" fill="#10b981" opacity="0.2"/>\n  <circle cx="64" cy="70" r="12" fill="#10b981"/>\n  <text x="106" y="64" fill="#eceff2" font-family="monospace" font-size="16" font-weight="bold">BrowserCode</text>\n  <text x="106" y="86" fill="#9aa2ad" font-family="sans-serif" font-size="12">SVG &amp; Bildvorschau aktiv</text>\n</svg>',
+        isBinary: false,
+        mime: 'image/svg+xml',
+        updatedAt: Date.now(),
+      },
+    };
+
+    const state = {
+      config: structuredClone(DEFAULT_CONFIG),
+      workspace: {},
+      chat: [], // UI + OpenAI-compatible history
+      memory: [], // [{ id, key, value, updatedAt }]
+      todos: [], // [{ id, content, status, priority }]
+      activeFile: null,
+      previewMode: 'auto', // 'auto' | 'source' | 'preview'
+      imageZoom: 1,
+      pendingAttachments: [], // [{ name, mime, isBinary, content, size }]
+      isRunning: false,
+      abortController: null,
+      pyodide: null,
+      pyodideLoading: null,
+    };
+
+    /* =========================================================================
+       2. UTILITIES & TOASTS
+       ========================================================================= */
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+    function toast(msg, type = 'info') {
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.textContent = msg;
+      $('#toastContainer').appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transition = 'opacity 0.2s';
+        setTimeout(() => el.remove(), 220);
+      }, 3200);
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    function uid(prefix = 'id') {
+      return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    }
+
+    function normalizePath(p) {
+      if (!p) return '';
+      let s = String(p).trim().replace(/\\/g, '/');
+      s = s.replace(/^\/+/, '').replace(/\/+$/, '');
+      const parts = [];
+      for (const seg of s.split('/')) {
+        if (!seg || seg === '.') continue;
+        if (seg === '..') parts.pop();
+        else parts.push(seg);
+      }
+      return parts.join('/');
+    }
+
+    function getExt(path) {
+      const m = String(path || '').toLowerCase().match(/\.([a-z0-9]+)$/);
+      return m ? m[1] : '';
+    }
+
+    function isImageFile(path, mime = '') {
+      const ext = getExt(path);
+      return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif'].includes(ext) ||
+        String(mime).startsWith('image/');
+    }
+
+    function guessMime(path) {
+      const map = {
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+        webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', ico: 'image/x-icon',
+        html: 'text/html', htm: 'text/html', css: 'text/css', js: 'text/javascript',
+        mjs: 'text/javascript', ts: 'text/typescript', json: 'application/json',
+        md: 'text/markdown', txt: 'text/plain', py: 'text/x-python', java: 'text/x-java',
+        xml: 'application/xml', csv: 'text/csv', yaml: 'text/yaml', yml: 'text/yaml',
+        ipynb: 'application/x-ipynb+json', pdf: 'application/pdf',
+      };
+      return map[getExt(path)] || 'text/plain';
+    }
+
+    function fileIcon(path, file) {
+      if (isImageFile(path, file?.mime)) return '🖼';
+      const ext = getExt(path);
+      if (['js', 'ts', 'jsx', 'tsx', 'mjs'].includes(ext)) return 'JS';
+      if (ext === 'py') return 'PY';
+      if (ext === 'java') return '☕';
+      if (['html', 'htm'].includes(ext)) return '◇';
+      if (ext === 'css') return '#';
+      if (['json', 'ipynb'].includes(ext)) return '{}';
+      if (ext === 'md') return 'M↓';
+      return '📄';
+    }
+
+    function getImageDataUrl(path, file) {
+      if (!file) return '';
+      if (file.isBinary && String(file.content).startsWith('data:')) {
+        return file.content;
+      }
+      if (getExt(path) === 'svg' || file.mime === 'image/svg+xml') {
+        const b64 = btoa(unescape(encodeURIComponent(file.content || '')));
+        return `data:image/svg+xml;base64,${b64}`;
+      }
+      return '';
+    }
+
+    function getFileByteSize(file) {
+      if (!file || !file.content) return 0;
+      if (file.isBinary && file.content.startsWith('data:')) {
+        const idx = file.content.indexOf(',');
+        return idx >= 0 ? Math.floor((file.content.length - idx - 1) * 0.75) : file.content.length;
+      }
+      return new Blob([file.content]).size;
+    }
+
+    /* =========================================================================
+       3. LOCALSTORAGE PERSISTENCE
+       ========================================================================= */
+    function loadState() {
+      try {
+        const savedCfg = JSON.parse(localStorage.getItem(STORAGE_KEYS.CONFIG) || 'null');
+        if (savedCfg) {
+          state.config = {
+            ...structuredClone(DEFAULT_CONFIG),
+            ...savedCfg,
+            optionalTools: {
+              ...DEFAULT_CONFIG.optionalTools,
+              ...(savedCfg.optionalTools || {}),
+            },
+          };
+        }
+      } catch (e) { console.warn('Config load error:', e); }
+
+      try {
+        const savedWs = JSON.parse(localStorage.getItem(STORAGE_KEYS.WORKSPACE) || 'null');
+        state.workspace = savedWs && typeof savedWs === 'object' ? savedWs : structuredClone(DEFAULT_WORKSPACE);
+      } catch (e) {
+        state.workspace = structuredClone(DEFAULT_WORKSPACE);
+      }
+
+      try {
+        const savedChat = JSON.parse(localStorage.getItem(STORAGE_KEYS.CHAT) || '[]');
+        state.chat = Array.isArray(savedChat) ? savedChat : [];
+      } catch (e) { state.chat = []; }
+
+      try {
+        const savedMem = JSON.parse(localStorage.getItem(STORAGE_KEYS.MEMORY) || '[]');
+        state.memory = Array.isArray(savedMem) ? savedMem : [];
+      } catch (e) { state.memory = []; }
+
+      try {
+        const savedTodos = JSON.parse(localStorage.getItem(STORAGE_KEYS.TODOS) || '[]');
+        state.todos = Array.isArray(savedTodos) ? savedTodos : [];
+      } catch (e) { state.todos = []; }
+    }
+
+    function saveKey(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+        updateStorageMeter();
+        return true;
+      } catch (err) {
+        toast('Speicherlimit im localStorage erreicht! Bitte große Dateien entfernen.', 'error');
+        console.error('localStorage save error:', err);
+        return false;
+      }
+    }
+
+    const saveConfig = () => saveKey(STORAGE_KEYS.CONFIG, state.config);
+    const saveWorkspace = () => saveKey(STORAGE_KEYS.WORKSPACE, state.workspace);
+    const saveChat = () => saveKey(STORAGE_KEYS.CHAT, state.chat);
+    const saveMemory = () => saveKey(STORAGE_KEYS.MEMORY, state.memory);
+    const saveTodos = () => saveKey(STORAGE_KEYS.TODOS, state.todos);
+
+    function updateStorageMeter() {
+      let totalBytes = 0;
+      for (const k of Object.values(STORAGE_KEYS)) {
+        const v = localStorage.getItem(k);
+        if (v) totalBytes += v.length * 2; // UTF-16
+      }
+      const limit = 5 * 1024 * 1024; // ~5 MB conservative browser limit
+      const pct = Math.min(100, (totalBytes / limit) * 100);
+      $('#storageText').textContent = `${formatBytes(totalBytes)} / 5 MB`;
+      const fill = $('#storageFill');
+      fill.style.width = `${pct.toFixed(1)}%`;
+      fill.className = 'storage-fill' + (pct > 85 ? ' danger' : pct > 65 ? ' warn' : '');
+    }
+
+    /* =========================================================================
+       4. VIRTUAL FILESYSTEM, GLOB, GREP & PURE-JS ZIP BUILDER
+       ========================================================================= */
+    const VFS = {
+      list(prefix = '') {
+        const norm = normalizePath(prefix);
+        return Object.keys(state.workspace)
+          .filter((p) => !norm || p === norm || p.startsWith(norm + '/'))
+          .sort((a, b) => a.localeCompare(b));
+      },
+      exists(path) {
+        return Object.prototype.hasOwnProperty.call(state.workspace, normalizePath(path));
+      },
+      get(path) {
+        return state.workspace[normalizePath(path)] || null;
+      },
+      write(path, content, opts = {}) {
+        const norm = normalizePath(path);
+        if (!norm) throw new Error('Ungültiger Dateipfad.');
+        const mime = opts.mime || guessMime(norm);
+        const isBinary = opts.isBinary ?? (typeof content === 'string' && content.startsWith('data:') && !mime.startsWith('text/') && mime !== 'image/svg+xml');
+        state.workspace[norm] = {
+          content: String(content ?? ''),
+          isBinary: Boolean(isBinary),
+          mime,
+          updatedAt: Date.now(),
+        };
+        saveWorkspace();
+        renderFileList();
+        if (state.activeFile === norm) renderPreview(norm);
+        return norm;
+      },
+      delete(path) {
+        const norm = normalizePath(path);
+        let removed = 0;
+        for (const k of Object.keys(state.workspace)) {
+          if (k === norm || k.startsWith(norm + '/')) {
+            delete state.workspace[k];
+            removed++;
+            if (state.activeFile === k) closePreview();
+          }
+        }
+        if (removed > 0) {
+          saveWorkspace();
+          renderFileList();
+        }
+        return removed;
+      },
+      globToRegex(pattern) {
+        let p = normalizePath(pattern);
+        let re = '^';
+        for (let i = 0; i < p.length; i++) {
+          const c = p[i];
+          if (c === '*') {
+            if (p[i + 1] === '*') {
+              if (p[i + 2] === '/') { re += '(?:.*/)?'; i += 2; }
+              else { re += '.*'; i += 1; }
+            } else {
+              re += '[^/]*';
+            }
+          } else if (c === '?') {
+            re += '[^/]';
+          } else if (c === '{') {
+            const end = p.indexOf('}', i);
+            if (end > i) {
+              const alts = p.slice(i + 1, end).split(',').map((s) => s.replace(/[.+^$()|[\]\\]/g, '\\$&'));
+              re += `(?:${alts.join('|')})`;
+              i = end;
+            } else re += '\\{';
+          } else if ('.+^$()|[]\\'.includes(c)) {
+            re += '\\' + c;
+          } else {
+            re += c;
+          }
+        }
+        return new RegExp(re + '$');
+      },
+      glob(pattern, basePath = '') {
+        const files = this.list(basePath);
+        const pat = basePath ? `${normalizePath(basePath)}/${normalizePath(pattern)}` : pattern;
+        const re = this.globToRegex(pat);
+        return files.filter((f) => re.test(f));
+      },
+      toUint8Array(file) {
+        if (file.isBinary && file.content.startsWith('data:')) {
+          const b64 = file.content.split(',')[1] || '';
+          const bin = atob(b64);
+          const arr = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          return arr;
+        }
+        return new TextEncoder().encode(file.content || '');
+      },
+      downloadFile(path) {
+        const f = this.get(path);
+        if (!f) return;
+        const bytes = this.toUint8Array(f);
+        const blob = new Blob([bytes], { type: f.mime || 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = path.split('/').pop();
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      },
+      downloadZip() {
+        const entries = Object.entries(state.workspace);
+        if (!entries.length) { toast('Workspace ist leer.', 'warn'); return; }
+        const blob = buildZipBlob(entries.map(([name, file]) => ({ name, data: this.toUint8Array(file) })));
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'browsercode-workspace.zip';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast(`ZIP mit ${entries.length} Datei(en) heruntergeladen.`, 'success');
+      },
+    };
+
+    // Pure-JS ZIP archive builder (Store method, valid CRC32)
+    function buildZipBlob(files) {
+      const crcTable = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        crcTable[i] = c >>> 0;
+      }
+      const crc32 = (bytes) => {
+        let c = 0xffffffff;
+        for (let i = 0; i < bytes.length; i++) c = crcTable[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+        return (c ^ 0xffffffff) >>> 0;
+      };
+      const enc = new TextEncoder();
+      const localParts = [];
+      const centralParts = [];
+      let offset = 0;
+
+      for (const f of files) {
+        const nameBytes = enc.encode(f.name);
+        const data = f.data;
+        const crc = crc32(data);
+
+        const local = new DataView(new ArrayBuffer(30 + nameBytes.length));
+        local.setUint32(0, 0x04034b50, true);
+        local.setUint16(4, 20, true);
+        local.setUint16(8, 0, true);
+        local.setUint32(14, crc, true);
+        local.setUint32(18, data.length, true);
+        local.setUint32(22, data.length, true);
+        local.setUint16(26, nameBytes.length, true);
+        new Uint8Array(local.buffer, 30).set(nameBytes);
+
+        localParts.push(new Uint8Array(local.buffer), data);
+
+        const central = new DataView(new ArrayBuffer(46 + nameBytes.length));
+        central.setUint32(0, 0x02014b50, true);
+        central.setUint16(4, 20, true);
+        central.setUint16(6, 20, true);
+        central.setUint16(10, 0, true);
+        central.setUint32(16, crc, true);
+        central.setUint32(20, data.length, true);
+        central.setUint32(24, data.length, true);
+        central.setUint16(28, nameBytes.length, true);
+        central.setUint32(42, offset, true);
+        new Uint8Array(central.buffer, 46).set(nameBytes);
+        centralParts.push(new Uint8Array(central.buffer));
+
+        offset += 30 + nameBytes.length + data.length;
+      }
+
+      const centralSize = centralParts.reduce((s, a) => s + a.length, 0);
+      const eocd = new DataView(new ArrayBuffer(22));
+      eocd.setUint32(0, 0x06054b50, true);
+      eocd.setUint16(8, files.length, true);
+      eocd.setUint16(10, files.length, true);
+      eocd.setUint32(12, centralSize, true);
+      eocd.setUint32(16, offset, true);
+
+      return new Blob([...localParts, ...centralParts, new Uint8Array(eocd.buffer)], { type: 'application/zip' });
+    }
+
+    /* =========================================================================
+       5. IN-BROWSER VIRTUAL BASH ENGINE
+       ========================================================================= */
+    function tokenizeShell(cmd) {
+      const tokens = [];
+      let cur = '';
+      let quote = null;
+      for (let i = 0; i < cmd.length; i++) {
+        const ch = cmd[i];
+        if (quote) {
+          if (ch === quote) quote = null;
+          else if (ch === '\\' && quote === '"' && i + 1 < cmd.length) cur += cmd[++i];
+          else cur += ch;
+        } else if (ch === '"' || ch === "'") {
+          quote = ch;
+        } else if (/\s/.test(ch)) {
+          if (cur) { tokens.push(cur); cur = ''; }
+        } else if (ch === '|' || ch === '>') {
+          if (cur) { tokens.push(cur); cur = ''; }
+          if (ch === '>' && cmd[i + 1] === '>') { tokens.push('>>'); i++; }
+          else tokens.push(ch);
+        } else {
+          cur += ch;
+        }
+      }
+      if (cur) tokens.push(cur);
+      return tokens;
+    }
+
+    async function runBash(command) {
+      const trimmed = String(command || '').trim();
+      if (!trimmed) return '';
+      // Split by && or ; outside quotes (simple)
+      const segments = trimmed.split(/\s*(?:&&|;)\s*/).filter(Boolean);
+      const outputs = [];
+
+      for (const seg of segments) {
+        const tokens = tokenizeShell(seg);
+        if (!tokens.length) continue;
+
+        // Handle output redirection
+        let redirectMode = null;
+        let redirectTarget = null;
+        const pipeParts = [];
+        let curPart = [];
+        for (let i = 0; i < tokens.length; i++) {
+          if (tokens[i] === '|') {
+            pipeParts.push(curPart);
+            curPart = [];
+          } else if (tokens[i] === '>' || tokens[i] === '>>') {
+            redirectMode = tokens[i];
+            redirectTarget = tokens[i + 1];
+            i++;
+          } else {
+            curPart.push(tokens[i]);
+          }
+        }
+        if (curPart.length) pipeParts.push(curPart);
+
+        let stdin = '';
+        for (const args of pipeParts) {
+          stdin = await execSingleShellCmd(args, stdin);
+        }
+
+        if (redirectMode && redirectTarget) {
+          const existing = redirectMode === '>>' ? (VFS.get(redirectTarget)?.content || '') : '';
+          VFS.write(redirectTarget, existing + stdin);
+          outputs.push(`[geschrieben nach ${normalizePath(redirectTarget)}]`);
+        } else if (stdin !== '') {
+          outputs.push(stdin);
+        }
+      }
+      return outputs.join('\n');
+    }
+
+    async function execSingleShellCmd(args, stdin) {
+      const cmd = args[0];
+      const rest = args.slice(1);
+      const flags = rest.filter((a) => a.startsWith('-'));
+      const pos = rest.filter((a) => !a.startsWith('-'));
+
+      switch (cmd) {
+        case 'pwd': return '/workspace';
+        case 'date': return new Date().toISOString();
+        case 'echo': return rest.join(' ');
+        case 'ls': {
+          const target = pos[0] || '';
+          const files = VFS.list(target);
+          if (!files.length) return '(leer)';
+          if (flags.some((f) => f.includes('l'))) {
+            return files.map((f) => {
+              const obj = VFS.get(f);
+              return `${formatBytes(getFileByteSize(obj)).padStart(8)}  ${f}`;
+            }).join('\n');
+          }
+          return files.join('\n');
+        }
+        case 'tree': {
+          const files = VFS.list(pos[0] || '');
+          return files.length ? files.map((f) => `├── ${f}`).join('\n') : '(leer)';
+        }
+        case 'cat': {
+          if (!pos.length) return stdin;
+          return pos.map((p) => {
+            const f = VFS.get(p);
+            if (!f) throw new Error(`cat: ${p}: Datei nicht gefunden`);
+            return f.isBinary ? `[Binärdatei ${p}, ${f.mime}, ${formatBytes(getFileByteSize(f))}]` : f.content;
+          }).join('\n');
+        }
+        case 'head': {
+          const nIdx = rest.indexOf('-n');
+          const n = nIdx >= 0 ? parseInt(rest[nIdx + 1], 10) || 10 : 10;
+          const fileArg = rest.find((a, i) => !a.startsWith('-') && (nIdx < 0 || i !== nIdx + 1));
+          const text = fileArg ? (VFS.get(fileArg)?.content ?? '') : stdin;
+          return text.split('\n').slice(0, n).join('\n');
+        }
+        case 'tail': {
+          const nIdx = rest.indexOf('-n');
+          const n = nIdx >= 0 ? parseInt(rest[nIdx + 1], 10) || 10 : 10;
+          const fileArg = rest.find((a, i) => !a.startsWith('-') && (nIdx < 0 || i !== nIdx + 1));
+          const text = fileArg ? (VFS.get(fileArg)?.content ?? '') : stdin;
+          return text.split('\n').slice(-n).join('\n');
+        }
+        case 'wc': {
+          const text = pos[0] ? (VFS.get(pos[0])?.content ?? '') : stdin;
+          const lines = text ? text.split('\n').length : 0;
+          const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+          const bytes = new Blob([text]).size;
+          if (flags.includes('-l')) return String(lines);
+          return `${lines} ${words} ${bytes}${pos[0] ? ' ' + pos[0] : ''}`;
+        }
+        case 'grep': {
+          const ci = flags.some((f) => f.includes('i'));
+          const pattern = pos[0];
+          if (!pattern) throw new Error('grep: Muster fehlt');
+          const re = new RegExp(pattern, ci ? 'i' : '');
+          const targets = pos.slice(1);
+          if (!targets.length && stdin) {
+            return stdin.split('\n').filter((l) => re.test(l)).join('\n');
+          }
+          const files = targets.length ? targets.flatMap((t) => VFS.list(t)) : VFS.list();
+          const out = [];
+          for (const f of files) {
+            const obj = VFS.get(f);
+            if (!obj || obj.isBinary) continue;
+            obj.content.split('\n').forEach((line, idx) => {
+              if (re.test(line)) out.push(`${f}:${idx + 1}:${line}`);
+            });
+          }
+          return out.join('\n') || '(keine Treffer)';
+        }
+        case 'find': {
+          const base = pos[0] && pos[0] !== '.' ? pos[0] : '';
+          const nameIdx = rest.indexOf('-name');
+          const namePat = nameIdx >= 0 ? rest[nameIdx + 1] : null;
+          let files = VFS.list(base);
+          if (namePat) {
+            const re = VFS.globToRegex('**/' + namePat);
+            const reRoot = VFS.globToRegex(namePat);
+            files = files.filter((f) => re.test(f) || reRoot.test(f));
+          }
+          return files.join('\n') || '(keine Dateien)';
+        }
+        case 'touch': {
+          for (const p of pos) if (!VFS.exists(p)) VFS.write(p, '');
+          return `Erstellt: ${pos.join(', ')}`;
+        }
+        case 'mkdir': return `Verzeichnis virtuell bereit: ${pos.join(', ')}`;
+        case 'cp': {
+          if (pos.length < 2) throw new Error('cp: Quelle und Ziel erforderlich');
+          const src = VFS.get(pos[0]);
+          if (!src) throw new Error(`cp: ${pos[0]} nicht gefunden`);
+          VFS.write(pos[1], src.content, { isBinary: src.isBinary, mime: src.mime });
+          return `Kopiert: ${pos[0]} -> ${pos[1]}`;
+        }
+        case 'mv': {
+          if (pos.length < 2) throw new Error('mv: Quelle und Ziel erforderlich');
+          const src = VFS.get(pos[0]);
+          if (!src) throw new Error(`mv: ${pos[0]} nicht gefunden`);
+          VFS.write(pos[1], src.content, { isBinary: src.isBinary, mime: src.mime });
+          VFS.delete(pos[0]);
+          return `Verschoben: ${pos[0]} -> ${pos[1]}`;
+        }
+        case 'rm': {
+          let count = 0;
+          for (const p of pos) count += VFS.delete(p);
+          return `Gelöscht: ${count} Datei(en)`;
+        }
+        case 'sort': {
+          const text = pos[0] ? (VFS.get(pos[0])?.content ?? '') : stdin;
+          const lines = text.split('\n').sort();
+          if (flags.includes('-r')) lines.reverse();
+          return lines.join('\n');
+        }
+        case 'uniq': {
+          const text = pos[0] ? (VFS.get(pos[0])?.content ?? '') : stdin;
+          const out = [];
+          for (const l of text.split('\n')) if (out[out.length - 1] !== l) out.push(l);
+          return out.join('\n');
+        }
+        case 'python':
+        case 'python3': {
+          if (!state.config.optionalTools.python) {
+            throw new Error('Python-Tool ist deaktiviert. Bitte in den Einstellungen aktivieren.');
+          }
+          if (rest[0] === '-c') return await runPython(rest.slice(1).join(' '));
+          if (pos[0]) {
+            const f = VFS.get(pos[0]);
+            if (!f) throw new Error(`python: ${pos[0]} nicht gefunden`);
+            return await runPython(f.content);
+          }
+          return await runPython(stdin);
+        }
+        case 'node':
+        case 'js': {
+          if (!state.config.optionalTools.javascript) {
+            throw new Error('JavaScript-Tool ist deaktiviert. Bitte in den Einstellungen aktivieren.');
+          }
+          if (rest[0] === '-e') return await runJavaScript(rest.slice(1).join(' '));
+          if (pos[0]) {
+            const f = VFS.get(pos[0]);
+            if (!f) throw new Error(`node: ${pos[0]} nicht gefunden`);
+            return await runJavaScript(f.content);
+          }
+          return await runJavaScript(stdin);
+        }
+        case 'java': {
+          if (!state.config.optionalTools.java) {
+            throw new Error('Java-Tool ist deaktiviert. Bitte in den Einstellungen aktivieren.');
+          }
+          if (pos[0]) {
+            const f = VFS.get(pos[0]) || VFS.get(pos[0] + '.java');
+            if (!f) throw new Error(`java: ${pos[0]} nicht gefunden`);
+            return await runJava(f.content);
+          }
+          return await runJava(stdin);
+        }
+        default:
+          throw new Error(`Unbekannter Shell-Befehl im Browser-Bash: "${cmd}". Verfügbar: ls, cat, head, tail, wc, grep, find, tree, touch, mkdir, cp, mv, rm, echo, pwd, sort, uniq, date${state.config.optionalTools.python ? ', python3' : ''}${state.config.optionalTools.javascript ? ', node' : ''}${state.config.optionalTools.java ? ', java' : ''}.`);
+      }
+    }
+
+    /* =========================================================================
+       6. OPTIONAL RUNTIMES: PYTHON (PYODIDE), JAVASCRIPT, JAVA, GITHUB
+       ========================================================================= */
+    async function ensurePyodide() {
+      if (state.pyodide) return state.pyodide;
+      if (state.pyodideLoading) return state.pyodideLoading;
+      state.pyodideLoading = (async () => {
+        toast('Lade Python (Pyodide WebAssembly)…', 'info');
+        if (!window.loadPyodide) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js';
+            s.onload = resolve;
+            s.onerror = () => reject(new Error('Pyodide konnte nicht vom CDN geladen werden.'));
+            document.head.appendChild(s);
+          });
+        }
+        const py = await window.loadPyodide({
+          indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/',
+        });
+        state.pyodide = py;
+        toast('Python (Pyodide) bereit!', 'success');
+        return py;
+      })();
+      try {
+        return await state.pyodideLoading;
+      } catch (e) {
+        state.pyodideLoading = null;
+        throw e;
+      }
+    }
+
+    async function runPython(code, packages = []) {
+      const py = await ensurePyodide();
+      if (Array.isArray(packages) && packages.length) {
+        await py.loadPackage(packages);
+      }
+
+      // Sync VFS -> Pyodide /workspace
+      const FS = py.FS;
+      try { FS.mkdir('/workspace'); } catch {}
+      const ensureDir = (dirPath) => {
+        const parts = dirPath.split('/').filter(Boolean);
+        let cur = '';
+        for (const p of parts) {
+          cur += '/' + p;
+          try { FS.mkdir(cur); } catch {}
+        }
+      };
+
+      const beforeMtimes = new Map();
+      for (const [path, file] of Object.entries(state.workspace)) {
+        const full = '/workspace/' + path;
+        const parent = full.slice(0, full.lastIndexOf('/'));
+        ensureDir(parent);
+        const bytes = VFS.toUint8Array(file);
+        FS.writeFile(full, bytes);
+        beforeMtimes.set(path, bytes.length);
+      }
+
+      const logs = [];
+      py.setStdout({ batched: (msg) => logs.push(msg) });
+      py.setStderr({ batched: (msg) => logs.push('[stderr] ' + msg) });
+
+      let resultVal = '';
+      try {
+        await py.runPythonAsync(`import os\nos.chdir('/workspace')\n`);
+        const res = await py.runPythonAsync(code);
+        if (res !== undefined && res !== null) {
+          resultVal = String(res);
+          if (typeof res.destroy === 'function') res.destroy();
+        }
+      } finally {
+        // Sync Pyodide /workspace -> VFS
+        const walk = (dir, rel = '') => {
+          for (const name of FS.readdir(dir)) {
+            if (name === '.' || name === '..') continue;
+            const full = dir + '/' + name;
+            const relPath = rel ? rel + '/' + name : name;
+            const stat = FS.stat(full);
+            if (FS.isDir(stat.mode)) {
+              walk(full, relPath);
+            } else {
+              const bytes = FS.readFile(full);
+              const mime = guessMime(relPath);
+              const isImgBin = isImageFile(relPath, mime) && mime !== 'image/svg+xml';
+              if (isImgBin) {
+                let bin = '';
+                for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                const dataUrl = `data:${mime};base64,${btoa(bin)}`;
+                if (state.workspace[relPath]?.content !== dataUrl) {
+                  VFS.write(relPath, dataUrl, { isBinary: true, mime });
+                }
+              } else {
+                const text = new TextDecoder().decode(bytes);
+                if (state.workspace[relPath]?.content !== text) {
+                  VFS.write(relPath, text, { isBinary: false, mime });
+                }
+              }
+            }
+          }
+        };
+        try { walk('/workspace'); } catch {}
+      }
+
+      const out = logs.join('\n');
+      if (out && resultVal) return `${out}\n=> ${resultVal}`;
+      return out || resultVal || '(Ausführung ohne Ausgabe abgeschlossen)';
+    }
+
+    async function runJavaScript(code) {
+      const logs = [];
+      const fmt = (v) => {
+        if (typeof v === 'string') return v;
+        try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+      };
+      const sandboxConsole = {
+        log: (...a) => logs.push(a.map(fmt).join(' ')),
+        info: (...a) => logs.push(a.map(fmt).join(' ')),
+        warn: (...a) => logs.push('[warn] ' + a.map(fmt).join(' ')),
+        error: (...a) => logs.push('[error] ' + a.map(fmt).join(' ')),
+      };
+      const workspaceApi = {
+        list: (p = '') => VFS.list(p),
+        read: (p) => VFS.get(p)?.content ?? null,
+        write: (p, content) => VFS.write(p, String(content)),
+        delete: (p) => VFS.delete(p),
+      };
+
+      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+      const fn = new AsyncFunction('console', 'workspace', `"use strict";\n${code}`);
+      const res = await Promise.race([
+        fn(sandboxConsole, workspaceApi),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('JavaScript Timeout nach 10s')), 10000)),
+      ]);
+
+      const out = logs.join('\n');
+      if (res !== undefined) {
+        return out ? `${out}\n=> ${fmt(res)}` : fmt(res);
+      }
+      return out || '(Ausführung ohne Ausgabe abgeschlossen)';
+    }
+
+    // In-Browser Java Transpiler & Standard Library Runtime
+    async function runJava(javaSource) {
+      const stdout = [];
+      const stderr = [];
+
+      const javaFormat = (fmt, ...args) => {
+        let idx = 0;
+        return String(fmt).replace(/%(-?\d*\.?\d*)([sdfoxeb%n])/g, (_, spec, type) => {
+          if (type === '%') return '%';
+          if (type === 'n') return '\n';
+          const val = args[idx++];
+          if (type === 'f') {
+            const m = spec.match(/\.(\d+)/);
+            return Number(val).toFixed(m ? parseInt(m[1], 10) : 6);
+          }
+          if (type === 'd') return String(Math.trunc(Number(val)));
+          if (type === 'x') return Math.trunc(Number(val)).toString(16);
+          return String(val);
+        });
+      };
+
+      // Java Standard Library Runtime
+      const System = {
+        out: {
+          println: (v = '') => stdout.push(String(v)),
+          print: (v = '') => {
+            if (!stdout.length) stdout.push(String(v));
+            else stdout[stdout.length - 1] += String(v);
+          },
+          printf: (fmt, ...args) => System.out.print(javaFormat(fmt, ...args)),
+        },
+        err: {
+          println: (v = '') => stderr.push(String(v)),
+          print: (v = '') => stderr.push(String(v)),
+        },
+        currentTimeMillis: () => Date.now(),
+        nanoTime: () => Math.floor(performance.now() * 1e6),
+      };
+
+      class ArrayList extends Array {
+        add(v) { this.push(v); return true; }
+        get(i) { return this[i]; }
+        set(i, v) { const old = this[i]; this[i] = v; return old; }
+        size() { return this.length; }
+        isEmpty() { return this.length === 0; }
+        contains(v) { return this.includes(v); }
+        remove(i) { return typeof i === 'number' ? this.splice(i, 1)[0] : this.splice(this.indexOf(i), 1)[0]; }
+        clear() { this.length = 0; }
+        toString() { return '[' + this.join(', ') + ']'; }
+      }
+
+      class HashMap extends Map {
+        put(k, v) { this.set(k, v); return v; }
+        containsKey(k) { return this.has(k); }
+        getOrDefault(k, d) { return this.has(k) ? this.get(k) : d; }
+        keySet() { return Array.from(this.keys()); }
+        values() { return Array.from(this.values()); }
+        size() { return super.size; }
+        isEmpty() { return super.size === 0; }
+        remove(k) { const v = this.get(k); this.delete(k); return v; }
+        toString() {
+          return '{' + Array.from(this.entries()).map(([k, v]) => `${k}=${v}`).join(', ') + '}';
+        }
+      }
+
+      class HashSet extends Set {
+        contains(v) { return this.has(v); }
+        size() { return super.size; }
+        isEmpty() { return super.size === 0; }
+        remove(v) { return this.delete(v); }
+        toString() { return '[' + Array.from(this).join(', ') + ']'; }
+      }
+
+      class StringBuilder {
+        constructor(init = '') { this._s = String(init); }
+        append(v) { this._s += String(v); return this; }
+        reverse() { this._s = this._s.split('').reverse().join(''); return this; }
+        length() { return this._s.length; }
+        toString() { return this._s; }
+      }
+
+      const Arrays = {
+        toString: (a) => '[' + (Array.isArray(a) ? a.join(', ') : String(a)) + ']',
+        sort: (a) => a.sort((x, y) => (typeof x === 'number' && typeof y === 'number') ? x - y : String(x).localeCompare(String(y))),
+        asList: (...items) => new ArrayList(...items),
+        fill: (a, v) => a.fill(v),
+      };
+
+      const Collections = {
+        sort: (a) => Arrays.sort(a),
+        reverse: (a) => a.reverse(),
+        max: (a) => Math.max(...a),
+        min: (a) => Math.min(...a),
+      };
+
+      const Integer = {
+        parseInt: (s, r = 10) => parseInt(s, r),
+        valueOf: (s) => parseInt(s, 10),
+        toString: (n) => String(n),
+        MAX_VALUE: 2147483647,
+        MIN_VALUE: -2147483648,
+      };
+      const Double = {
+        parseDouble: (s) => parseFloat(s),
+        valueOf: (s) => parseFloat(s),
+      };
+      const Files = {
+        readString: (p) => VFS.get(p)?.content ?? '',
+        writeString: (p, s) => VFS.write(p, String(s)),
+      };
+
+      // Transpile Java syntax -> JS
+      let js = transpileJavaToJs(javaSource);
+
+      // Attach Java-like String helper methods safely for execution
+      const patchedMethods = {
+        equals(other) { return String(this) === String(other); },
+        equalsIgnoreCase(other) { return String(this).toLowerCase() === String(other).toLowerCase(); },
+        contains(sub) { return String(this).includes(sub); },
+        isEmpty() { return String(this).length === 0; },
+      };
+      const origProtos = {};
+      for (const [k, fn] of Object.entries(patchedMethods)) {
+        origProtos[k] = String.prototype[k];
+        Object.defineProperty(String.prototype, k, { value: fn, configurable: true, writable: true });
+      }
+      const origStrFormat = String.format;
+      String.format = javaFormat;
+
+      try {
+        const runner = new Function(
+          'System', 'ArrayList', 'HashMap', 'HashSet', 'StringBuilder', 'Arrays', 'Collections', 'Integer', 'Double', 'Files',
+          `"use strict";\n${js}`
+        );
+        runner(System, ArrayList, HashMap, HashSet, StringBuilder, Arrays, Collections, Integer, Double, Files);
+      } finally {
+        for (const [k, orig] of Object.entries(origProtos)) {
+          if (orig === undefined) delete String.prototype[k];
+          else String.prototype[k] = orig;
+        }
+        if (origStrFormat === undefined) delete String.format;
+        else String.format = origStrFormat;
+      }
+
+      const out = [...stdout, ...stderr.map((l) => '[stderr] ' + l)].join('\n');
+      return out || '(Java-Ausführung ohne Ausgabe abgeschlossen)';
+    }
+
+    function transpileJavaToJs(src) {
+      // Mask string literals & comments so regexes never touch them
+      const strings = [];
+      let code = src
+        .replace(/\/\/[^\n]*/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/"(?:\\.|[^"\\])*"/g, (m) => { strings.push(m); return `__STR_${strings.length - 1}__`; })
+        .replace(/'(?:\\.|[^'\\])*'/g, (m) => { strings.push(m); return `__STR_${strings.length - 1}__`; });
+
+      // Remove package & import lines
+      code = code.replace(/^\s*(?:package|import)\s+[^;]+;/gm, '');
+
+      // Detect main class name
+      const classMatches = [...code.matchAll(/\bclass\s+([A-Za-z_]\w*)/g)].map((m) => m[1]);
+      const mainClass = classMatches.find((c) => new RegExp(`class\\s+${c}[\\s\\S]*?static\\s+void\\s+main`).test(code)) || classMatches[0];
+
+      // Replace `new Type[]{a, b}` -> `[a, b]` and `new Type[n]` -> `new Array(n).fill(0)`
+      code = code.replace(/new\s+[A-Za-z_]\w*(?:<[^>]*>)?\s*\[\s*\]\s*\{([^}]*)\}/g, '[$1]');
+      code = code.replace(/new\s+(?:int|long|double|float)\s*\[([^\]]+)\]/g, 'new Array($1).fill(0)');
+      code = code.replace(/new\s+(?:boolean)\s*\[([^\]]+)\]/g, 'new Array($1).fill(false)');
+      code = code.replace(/new\s+[A-Za-z_]\w*\s*\[([^\]]+)\]/g, 'new Array($1).fill(null)');
+
+      // Strip generics on constructors: `new ArrayList<String>()` -> `new ArrayList()`
+      code = code.replace(/new\s+([A-Za-z_]\w*)\s*<[^>()]*>\s*\(/g, 'new $1(');
+
+      // Enhanced for-loop: `for (Type x : col)` -> `for (let x of col)`
+      code = code.replace(/\bfor\s*\(\s*(?:final\s+)?[A-Za-z_]\w*(?:<[^>]*>)?(?:\[\])?\s+([A-Za-z_]\w*)\s*:\s*([^)]+)\)/g, 'for (let $1 of $2)');
+
+      // Strip class/method modifiers
+      code = code.replace(/\b(public|private|protected|final|abstract|synchronized)\s+/g, '');
+
+      // Convert `static ReturnType methodName(TypedParams)` inside class
+      const typePat = '(?:void|int|long|double|float|boolean|char|byte|short|String|Object|var|[A-Z][A-Za-z0-9_]*)(?:<[^>]*>)?(?:\\[\\])*';
+
+      // Constructors: `ClassName(Type a, Type b) {` -> `constructor(a, b) {`
+      for (const cls of classMatches) {
+        const ctorRe = new RegExp(`(^|\\n)(\\s*)${cls}\\s*\\(([^)]*)\\)\\s*\\{`, 'g');
+        code = code.replace(ctorRe, (_, nl, sp, params) => {
+          return `${nl}${sp}constructor(${stripJavaParamTypes(params)}) {`;
+        });
+      }
+
+      // Collect static method names per class for unqualified calls (e.g. fib(n-1) -> Main.fib(n-1))
+      const staticMethods = [];
+      const methodRe = new RegExp(`(^|\\n)(\\s*)(static\\s+)?${typePat}\\s+([a-zA-Z_]\\w*)\\s*\\(([^)]*)\\)(?:\\s*throws\\s+[\\w,\\s]+)?\\s*\\{`, 'g');
+      code = code.replace(methodRe, (full, nl, sp, isStatic, name, params) => {
+        if (['if', 'for', 'while', 'switch', 'catch'].includes(name)) return full;
+        if (isStatic && mainClass) staticMethods.push(name);
+        return `${nl}${sp}${isStatic ? 'static ' : ''}${name}(${stripJavaParamTypes(params)}) {`;
+      });
+
+      // Catch blocks: `catch (Exception e)` -> `catch (e)`
+      code = code.replace(/\bcatch\s*\(\s*[A-Za-z_][\w.|]*\s+([A-Za-z_]\w*)\s*\)/g, 'catch ($1)');
+
+      // Variable declarations: `Type x = ...;` or `Type x;`
+      const varRe = new RegExp(`(^|[;{}()\\n]\\s*)${typePat}\\s+([a-zA-Z_]\\w*)\\s*(=|;|,)`, 'g');
+      code = code.replace(varRe, (full, pre, name, sep) => {
+        if (['return', 'class', 'new', 'throw', 'case', 'else'].includes(name)) return full;
+        return `${pre}let ${name} ${sep}`;
+      });
+
+      // Fix JS class fields where `let` was added right inside class { ... }
+      code = code.replace(/static\s+let\s+/g, 'static ');
+
+      // Qualify unqualified calls to static methods of mainClass (e.g. `fib(i)` -> `Main.fib(i)`)
+      if (mainClass && staticMethods.length) {
+        const uniqueStatics = [...new Set(staticMethods)].filter((n) => n !== 'main');
+        for (const fnName of uniqueStatics) {
+          const callRe = new RegExp(`(?<!\\.|static\\s+)\\b${fnName}\\s*\\((?![^)]*\\)\\s*\\{)`, 'g');
+          code = code.replace(callRe, `${mainClass}.${fnName}(`);
+        }
+      }
+
+      // Convert `.length()` on strings to `.length`
+      code = code.replace(/\.length\(\)/g, '.length');
+
+      // Convert array literal initializer `= {1, 2, 3};` -> `= [1, 2, 3];`
+      code = code.replace(/=\s*\{([^{};]+)\}\s*;/g, '= [$1];');
+
+      // Restore strings
+      code = code.replace(/__STR_(\d+)__/g, (_, i) => strings[Number(i)]);
+
+      // Invoke main() automatically if found
+      if (mainClass) {
+        code += `\nif (typeof ${mainClass} !== 'undefined' && typeof ${mainClass}.main === 'function') { ${mainClass}.main([]); }\n`;
+      }
+      return code;
+    }
+
+    function stripJavaParamTypes(params) {
+      if (!params.trim()) return '';
+      return params.split(',').map((p) => {
+        const parts = p.trim().split(/\s+/);
+        return parts[parts.length - 1].replace(/\[\]/g, '');
+      }).join(', ');
+    }
+
+    // GitHub REST API Client
+    const GitHub = {
+      async request(endpoint, method = 'GET', body = null) {
+        const token = state.config.githubToken?.trim();
+        if (!token) throw new Error('Kein GitHub Token in den Einstellungen konfiguriert.');
+        const res = await fetch(`https://api.github.com${endpoint}`, {
+          method,
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            ...(body ? { 'Content-Type': 'application/json' } : {}),
+          },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = text; }
+        if (!res.ok) {
+          throw new Error(`GitHub API ${res.status}: ${data?.message || text}`);
+        }
+        return data;
+      },
+      resolveRepo(repoArg) {
+        const repo = (repoArg || state.config.githubRepo || '').trim();
+        if (!repo || !repo.includes('/')) {
+          throw new Error('Repository fehlt. Bitte "owner/repo" im Tool-Aufruf oder in den Einstellungen angeben.');
+        }
+        return repo;
+      },
+      async getRepo(repo) {
+        const r = this.resolveRepo(repo);
+        const d = await this.request(`/repos/${r}`);
+        return { full_name: d.full_name, default_branch: d.default_branch, private: d.private, html_url: d.html_url, description: d.description };
+      },
+      async readFile(repo, path, ref) {
+        const r = this.resolveRepo(repo);
+        const q = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+        const d = await this.request(`/repos/${r}/contents/${normalizePath(path)}${q}`);
+        if (Array.isArray(d)) {
+          return d.map((item) => `${item.type === 'dir' ? '[dir]' : '[file]'} ${item.path}`).join('\n');
+        }
+        const content = d.encoding === 'base64' ? decodeURIComponent(escape(atob(d.content.replace(/\n/g, '')))) : d.content;
+        return { path: d.path, sha: d.sha, size: d.size, content };
+      },
+      async createBranch(repo, newBranch, baseBranch) {
+        const r = this.resolveRepo(repo);
+        let base = baseBranch;
+        if (!base) {
+          const info = await this.getRepo(r);
+          base = info.default_branch;
+        }
+        const refData = await this.request(`/repos/${r}/git/ref/heads/${encodeURIComponent(base)}`);
+        const sha = refData.object.sha;
+        const created = await this.request(`/repos/${r}/git/refs`, 'POST', {
+          ref: `refs/heads/${newBranch}`,
+          sha,
+        });
+        return { branch: newBranch, base, sha: created.object.sha };
+      },
+      async commitFile(repo, branch, path, content, message, fromWorkspacePath) {
+        const r = this.resolveRepo(repo);
+        const normPath = normalizePath(path);
+        let b64Content;
+        if (fromWorkspacePath) {
+          const f = VFS.get(fromWorkspacePath);
+          if (!f) throw new Error(`Workspace-Datei nicht gefunden: ${fromWorkspacePath}`);
+          if (f.isBinary && f.content.startsWith('data:')) {
+            b64Content = f.content.split(',')[1];
+          } else {
+            b64Content = btoa(unescape(encodeURIComponent(f.content)));
+          }
+        } else {
+          b64Content = btoa(unescape(encodeURIComponent(String(content ?? ''))));
+        }
+
+        let existingSha = undefined;
+        try {
+          const existing = await this.request(`/repos/${r}/contents/${normPath}?ref=${encodeURIComponent(branch)}`);
+          existingSha = existing.sha;
+        } catch { /* new file */ }
+
+        const res = await this.request(`/repos/${r}/contents/${normPath}`, 'PUT', {
+          message: message || `Update ${normPath}`,
+          content: b64Content,
+          branch,
+          ...(existingSha ? { sha: existingSha } : {}),
+        });
+        return { path: normPath, branch, commit_sha: res.commit?.sha, html_url: res.content?.html_url };
+      },
+      async createPullRequest(repo, title, body, head, base, draft = false) {
+        const r = this.resolveRepo(repo);
+        let baseBranch = base;
+        if (!baseBranch) {
+          const info = await this.getRepo(r);
+          baseBranch = info.default_branch;
+        }
+        const pr = await this.request(`/repos/${r}/pulls`, 'POST', {
+          title,
+          body: body || '',
+          head,
+          base: baseBranch,
+          draft: Boolean(draft),
+        });
+        return { number: pr.number, title: pr.title, state: pr.state, html_url: pr.html_url };
+      },
+    };
+
+    /* =========================================================================
+       7. CLAUDE CODE STANDARD TOOLS + OPTIONAL TOOLS REGISTRY
+       ========================================================================= */
+    function getActiveToolDefinitions() {
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'Read',
+            description: 'Liest eine Datei aus dem Workspace mit Zeilennummern. Unterstützt Textdateien und Bilder (gibt Metadaten zurück).',
+            parameters: {
+              type: 'object',
+              properties: {
+                file_path: { type: 'string', description: 'Relativer Pfad im Workspace' },
+                offset: { type: 'integer', description: 'Startzeile (1-basiert, optional)' },
+                limit: { type: 'integer', description: 'Max. Anzahl Zeilen (optional)' },
+              },
+              required: ['file_path'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'Write',
+            description: 'Erstellt oder überschreibt eine Datei im Workspace.',
+            parameters: {
+              type: 'object',
+              properties: {
+                file_path: { type: 'string', description: 'Zielpfad im Workspace' },
+                content: { type: 'string', description: 'Vollständiger Dateiinhalt (Text, SVG oder Data-URL)' },
+              },
+              required: ['file_path', 'content'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'Edit',
+            description: 'Ersetzt eine exakte Textstelle (old_string) durch new_string in einer Workspace-Datei.',
+            parameters: {
+              type: 'object',
+              properties: {
+                file_path: { type: 'string' },
+                old_string: { type: 'string', description: 'Exakter zu ersetzender Text' },
+                new_string: { type: 'string', description: 'Neuer Text' },
+                replace_all: { type: 'boolean', description: 'Alle Vorkommen ersetzen (Standard: false)' },
+              },
+              required: ['file_path', 'old_string', 'new_string'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'MultiEdit',
+            description: 'Führt mehrere exakte Ersetzungen atomar auf derselben Datei aus.',
+            parameters: {
+              type: 'object',
+              properties: {
+                file_path: { type: 'string' },
+                edits: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      old_string: { type: 'string' },
+                      new_string: { type: 'string' },
+                      replace_all: { type: 'boolean' },
+                    },
+                    required: ['old_string', 'new_string'],
+                  },
+                },
+              },
+              required: ['file_path', 'edits'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'LS',
+            description: 'Listet Dateien im Workspace (optional unterhalb eines Pfades) auf.',
+            parameters: {
+              type: 'object',
+              properties: {
+                path: { type: 'string', description: 'Optionaler Unterpfad' },
+              },
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'Glob',
+            description: 'Sucht Dateien im Workspace anhand eines Glob-Musters (z. B. "**/*.js", "src/*.py").',
+            parameters: {
+              type: 'object',
+              properties: {
+                pattern: { type: 'string' },
+                path: { type: 'string', description: 'Optionales Basisverzeichnis' },
+              },
+              required: ['pattern'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'Grep',
+            description: 'Durchsucht Workspace-Dateien per regulärem Ausdruck.',
+            parameters: {
+              type: 'object',
+              properties: {
+                pattern: { type: 'string', description: 'RegEx-Muster' },
+                path: { type: 'string', description: 'Optionaler Pfad oder Dateiname' },
+                glob: { type: 'string', description: 'Optionaler Glob-Filter' },
+                output_mode: { type: 'string', enum: ['content', 'files_with_matches', 'count'] },
+                case_insensitive: { type: 'boolean' },
+              },
+              required: ['pattern'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'Delete',
+            description: 'Löscht eine Datei oder ein Verzeichnis-Präfix aus dem Workspace.',
+            parameters: {
+              type: 'object',
+              properties: {
+                file_path: { type: 'string' },
+              },
+              required: ['file_path'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'Bash',
+            description: 'Führt Shell-Befehle im Browser-Workspace aus (ls, cat, head, tail, wc, grep, find, tree, touch, cp, mv, rm, echo, sort, uniq, Pipes |, Umleitungen > / >>).',
+            parameters: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' },
+              },
+              required: ['command'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'TodoWrite',
+            description: 'Aktualisiert die strukturierte Aufgabenliste (Plan) in der Sidebar.',
+            parameters: {
+              type: 'object',
+              properties: {
+                todos: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string' },
+                      content: { type: 'string' },
+                      status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] },
+                      priority: { type: 'string', enum: ['high', 'medium', 'low'] },
+                    },
+                    required: ['content', 'status'],
+                  },
+                },
+              },
+              required: ['todos'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'NotebookEdit',
+            description: 'Bearbeitet eine Jupyter-Notebook-Datei (.ipynb) im Workspace.',
+            parameters: {
+              type: 'object',
+              properties: {
+                notebook_path: { type: 'string' },
+                cell_number: { type: 'integer', description: '0-basierter Zellenindex' },
+                new_source: { type: 'string' },
+                cell_type: { type: 'string', enum: ['code', 'markdown'] },
+                edit_mode: { type: 'string', enum: ['replace', 'insert', 'delete'] },
+              },
+              required: ['notebook_path', 'cell_number'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'WebFetch',
+            description: 'Ruft eine URL per Browser-Fetch ab (CORS-abhängig) und extrahiert den Textinhalt.',
+            parameters: {
+              type: 'object',
+              properties: {
+                url: { type: 'string' },
+              },
+              required: ['url'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'MemoryWrite',
+            description: 'Speichert oder aktualisiert einen dauerhaften Eintrag im Langzeit-Gedächtnis (bleibt über Chats hinweg erhalten).',
+            parameters: {
+              type: 'object',
+              properties: {
+                key: { type: 'string', description: 'Kurzer eindeutiger Schlüssel (z. B. user_language, project_stack)' },
+                value: { type: 'string', description: 'Zu merkende Information' },
+              },
+              required: ['key', 'value'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'MemoryRead',
+            description: 'Liest alle oder einen bestimmten Eintrag aus dem Langzeit-Gedächtnis.',
+            parameters: {
+              type: 'object',
+              properties: {
+                key: { type: 'string', description: 'Optionaler Schlüssel' },
+              },
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'MemoryDelete',
+            description: 'Löscht einen Eintrag aus dem Langzeit-Gedächtnis.',
+            parameters: {
+              type: 'object',
+              properties: {
+                key: { type: 'string' },
+              },
+              required: ['key'],
+            },
+          },
+        },
+      ];
+
+      // Optional Tools
+      if (state.config.optionalTools.python) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: 'RunPython',
+            description: 'Führt Python-3-Code direkt im Browser (Pyodide WebAssembly) aus. Dateien in /workspace werden automatisch mit dem Workspace synchronisiert.',
+            parameters: {
+              type: 'object',
+              properties: {
+                code: { type: 'string', description: 'Auszuführender Python-Code' },
+                packages: { type: 'array', items: { type: 'string' }, description: 'Optionale Pyodide-Pakete (z. B. ["numpy", "matplotlib"])' },
+              },
+              required: ['code'],
+            },
+          },
+        });
+      }
+
+      if (state.config.optionalTools.javascript) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: 'RunJavaScript',
+            description: 'Führt JavaScript-Code in einer Browser-Sandbox aus. Verfügbar: console.log und workspace.{list,read,write,delete}.',
+            parameters: {
+              type: 'object',
+              properties: {
+                code: { type: 'string', description: 'Auszuführender JavaScript-Code' },
+              },
+              required: ['code'],
+            },
+          },
+        });
+      }
+
+      if (state.config.optionalTools.java) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: 'RunJava',
+            description: 'Führt Java-Code direkt im Browser aus (Klassen, static void main, System.out, ArrayList, HashMap, Arrays, Math, Files).',
+            parameters: {
+              type: 'object',
+              properties: {
+                code: { type: 'string', description: 'Vollständiger Java-Quellcode' },
+              },
+              required: ['code'],
+            },
+          },
+        });
+      }
+
+      if (state.config.optionalTools.github) {
+        tools.push(
+          {
+            type: 'function',
+            function: {
+              name: 'GitHub_ReadFile',
+              description: 'Liest eine Datei oder ein Verzeichnis aus einem GitHub-Repository.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  repo: { type: 'string', description: 'owner/repo (optional, nutzt sonst Standard-Repo)' },
+                  path: { type: 'string', description: 'Pfad im Repo (leer für Root)' },
+                  ref: { type: 'string', description: 'Branch oder Commit-SHA (optional)' },
+                },
+                required: ['path'],
+              },
+            },
+          },
+          {
+            type: 'function',
+            function: {
+              name: 'GitHub_CreateBranch',
+              description: 'Erstellt einen neuen Branch in einem GitHub-Repository.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  repo: { type: 'string', description: 'owner/repo (optional)' },
+                  new_branch: { type: 'string', description: 'Name des neuen Branches' },
+                  base_branch: { type: 'string', description: 'Basis-Branch (Standard: Default-Branch)' },
+                },
+                required: ['new_branch'],
+              },
+            },
+          },
+          {
+            type: 'function',
+            function: {
+              name: 'GitHub_CommitFile',
+              description: 'Erstellt oder aktualisiert eine Datei auf einem GitHub-Branch (direkt per content oder aus einer Workspace-Datei).',
+              parameters: {
+                type: 'object',
+                properties: {
+                  repo: { type: 'string', description: 'owner/repo (optional)' },
+                  branch: { type: 'string', description: 'Ziel-Branch' },
+                  path: { type: 'string', description: 'Dateipfad im Repo' },
+                  content: { type: 'string', description: 'Dateiinhalt (optional wenn workspace_path gesetzt)' },
+                  workspace_path: { type: 'string', description: 'Pfad im lokalen Workspace, der committed werden soll' },
+                  message: { type: 'string', description: 'Commit-Nachricht' },
+                },
+                required: ['branch', 'path', 'message'],
+              },
+            },
+          },
+          {
+            type: 'function',
+            function: {
+              name: 'GitHub_CreatePR',
+              description: 'Erstellt einen Pull Request auf GitHub.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  repo: { type: 'string', description: 'owner/repo (optional)' },
+                  title: { type: 'string' },
+                  body: { type: 'string' },
+                  head: { type: 'string', description: 'Quell-Branch' },
+                  base: { type: 'string', description: 'Ziel-Branch (Standard: Default-Branch)' },
+                  draft: { type: 'boolean' },
+                },
+                required: ['title', 'head'],
+              },
+            },
+          }
+        );
+      }
+
+      return tools;
+    }
+
+    async function executeTool(name, args) {
+      args = args || {};
+      switch (name) {
+        case 'Read': {
+          const norm = normalizePath(args.file_path);
+          const f = VFS.get(norm);
+          if (!f) throw new Error(`Datei nicht gefunden: ${norm}`);
+          if (isImageFile(norm, f.mime) && f.isBinary) {
+            return `[Bilddatei: ${norm}, MIME: ${f.mime}, Größe: ${formatBytes(getFileByteSize(f))}. Kann in der Workspace-Vorschau angezeigt werden.]`;
+          }
+          const lines = f.content.split('\n');
+          const start = Math.max(1, Number(args.offset) || 1);
+          const limit = Number(args.limit) || lines.length;
+          const slice = lines.slice(start - 1, start - 1 + limit);
+          return slice.map((l, i) => `${String(start + i).padStart(4)} | ${l}`).join('\n');
+        }
+        case 'Write': {
+          const norm = VFS.write(args.file_path, args.content);
+          return `Datei geschrieben: ${norm} (${formatBytes(getFileByteSize(VFS.get(norm)))})`;
+        }
+        case 'Edit': {
+          const norm = normalizePath(args.file_path);
+          const f = VFS.get(norm);
+          if (!f) throw new Error(`Datei nicht gefunden: ${norm}`);
+          if (f.isBinary) throw new Error(`Binärdatei kann nicht mit Edit bearbeitet werden: ${norm}`);
+          const oldStr = String(args.old_string ?? '');
+          const newStr = String(args.new_string ?? '');
+          if (!oldStr) throw new Error('old_string darf nicht leer sein.');
+          const count = f.content.split(oldStr).length - 1;
+          if (count === 0) throw new Error(`old_string wurde in ${norm} nicht gefunden.`);
+          if (count > 1 && !args.replace_all) {
+            throw new Error(`old_string kommt ${count}x in ${norm} vor. Bitte mehr Kontext angeben oder replace_all=true setzen.`);
+          }
+          const updated = args.replace_all ? f.content.split(oldStr).join(newStr) : f.content.replace(oldStr, newStr);
+          VFS.write(norm, updated, { mime: f.mime, isBinary: false });
+          return `Datei bearbeitet: ${norm} (${args.replace_all ? count : 1} Ersetzung(en))`;
+        }
+        case 'MultiEdit': {
+          const norm = normalizePath(args.file_path);
+          const f = VFS.get(norm);
+          if (!f) throw new Error(`Datei nicht gefunden: ${norm}`);
+          let content = f.content;
+          for (const [i, ed] of (args.edits || []).entries()) {
+            const count = content.split(ed.old_string).length - 1;
+            if (count === 0) throw new Error(`Edit #${i + 1}: old_string nicht gefunden.`);
+            if (count > 1 && !ed.replace_all) throw new Error(`Edit #${i + 1}: old_string ist mehrdeutig (${count}x).`);
+            content = ed.replace_all ? content.split(ed.old_string).join(ed.new_string) : content.replace(ed.old_string, ed.new_string);
+          }
+          VFS.write(norm, content, { mime: f.mime, isBinary: false });
+          return `${(args.edits || []).length} Änderungen auf ${norm} angewendet.`;
+        }
+        case 'LS': {
+          const list = VFS.list(args.path || '');
+          if (!list.length) return '(keine Dateien)';
+          return list.map((p) => `${p} (${formatBytes(getFileByteSize(VFS.get(p)))})`).join('\n');
+        }
+        case 'Glob': {
+          const matches = VFS.glob(args.pattern, args.path || '');
+          return matches.length ? matches.join('\n') : '(keine Treffer)';
+        }
+        case 'Grep': {
+          const re = new RegExp(args.pattern, args.case_insensitive ? 'i' : '');
+          let files = args.glob ? VFS.glob(args.glob, args.path || '') : VFS.list(args.path || '');
+          const mode = args.output_mode || 'content';
+          const out = [];
+          for (const p of files) {
+            const f = VFS.get(p);
+            if (!f || f.isBinary) continue;
+            const lines = f.content.split('\n');
+            let matchCount = 0;
+            lines.forEach((line, idx) => {
+              if (re.test(line)) {
+                matchCount++;
+                if (mode === 'content') out.push(`${p}:${idx + 1}: ${line}`);
+              }
+            });
+            if (matchCount > 0 && mode === 'files_with_matches') out.push(p);
+            if (matchCount > 0 && mode === 'count') out.push(`${p}: ${matchCount}`);
+          }
+          return out.length ? out.join('\n') : '(keine Treffer)';
+        }
+        case 'Delete': {
+          const n = VFS.delete(args.file_path);
+          if (!n) throw new Error(`Nicht gefunden: ${args.file_path}`);
+          return `Gelöscht: ${n} Datei(en)`;
+        }
+        case 'Bash':
+          return await runBash(args.command);
+        case 'TodoWrite': {
+          state.todos = (args.todos || []).map((t, i) => ({
+            id: t.id || `t${i + 1}`,
+            content: String(t.content || ''),
+            status: t.status || 'pending',
+            priority: t.priority || 'medium',
+          }));
+          saveTodos();
+          renderTodos();
+          return `Aufgabenliste aktualisiert (${state.todos.length} Einträge).`;
+        }
+        case 'NotebookEdit': {
+          const norm = normalizePath(args.notebook_path);
+          let nb = { cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 };
+          const existing = VFS.get(norm);
+          if (existing) nb = JSON.parse(existing.content);
+          const idx = Number(args.cell_number) || 0;
+          const mode = args.edit_mode || 'replace';
+          const cellObj = {
+            cell_type: args.cell_type || 'code',
+            metadata: {},
+            source: String(args.new_source || '').split('\n').map((l, i, arr) => i < arr.length - 1 ? l + '\n' : l),
+            ...(args.cell_type === 'markdown' ? {} : { outputs: [], execution_count: null }),
+          };
+          if (mode === 'delete') nb.cells.splice(idx, 1);
+          else if (mode === 'insert') nb.cells.splice(idx, 0, cellObj);
+          else nb.cells[idx] = cellObj;
+          VFS.write(norm, JSON.stringify(nb, null, 2), { mime: 'application/x-ipynb+json' });
+          return `Notebook ${norm} aktualisiert (${mode} Zelle ${idx}).`;
+        }
+        case 'WebFetch': {
+          const res = await fetch(args.url);
+          const text = await res.text();
+          const clean = text.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          return clean.slice(0, 12000) + (clean.length > 12000 ? '\n… [gekürzt]' : '');
+        }
+        case 'MemoryWrite': {
+          const key = String(args.key || '').trim();
+          const val = String(args.value || '').trim();
+          const existing = state.memory.find((m) => m.key === key);
+          if (existing) { existing.value = val; existing.updatedAt = Date.now(); }
+          else state.memory.push({ id: uid('mem'), key, value: val, updatedAt: Date.now() });
+          saveMemory();
+          renderMemory();
+          return `Im Gedächtnis gespeichert: "${key}"`;
+        }
+        case 'MemoryRead': {
+          if (args.key) {
+            const m = state.memory.find((x) => x.key === args.key);
+            return m ? `${m.key}: ${m.value}` : `(Kein Eintrag für "${args.key}")`;
+          }
+          return state.memory.length
+            ? state.memory.map((m) => `- ${m.key}: ${m.value}`).join('\n')
+            : '(Gedächtnis ist leer)';
+        }
+        case 'MemoryDelete': {
+          const before = state.memory.length;
+          state.memory = state.memory.filter((m) => m.key !== args.key);
+          saveMemory();
+          renderMemory();
+          return state.memory.length < before ? `Gelöscht: "${args.key}"` : `Nicht gefunden: "${args.key}"`;
+        }
+        case 'RunPython':
+          if (!state.config.optionalTools.python) throw new Error('Python-Tool ist nicht aktiviert.');
+          return await runPython(args.code, args.packages);
+        case 'RunJavaScript':
+          if (!state.config.optionalTools.javascript) throw new Error('JavaScript-Tool ist nicht aktiviert.');
+          return await runJavaScript(args.code);
+        case 'RunJava':
+          if (!state.config.optionalTools.java) throw new Error('Java-Tool ist nicht aktiviert.');
+          return await runJava(args.code);
+        case 'GitHub_ReadFile':
+          if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
+          return JSON.stringify(await GitHub.readFile(args.repo, args.path, args.ref), null, 2);
+        case 'GitHub_CreateBranch':
+          if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
+          return JSON.stringify(await GitHub.createBranch(args.repo, args.new_branch, args.base_branch), null, 2);
+        case 'GitHub_CommitFile':
+          if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
+          return JSON.stringify(await GitHub.commitFile(args.repo, args.branch, args.path, args.content, args.message, args.workspace_path), null, 2);
+        case 'GitHub_CreatePR':
+          if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
+          return JSON.stringify(await GitHub.createPullRequest(args.repo, args.title, args.body, args.head, args.base, args.draft), null, 2);
+        default:
+          throw new Error(`Unbekanntes Tool: ${name}`);
+      }
+    }
+
+    /* =========================================================================
+       8. AGENTIC LOOP & OPENAI-COMPATIBLE API CLIENT
+       ========================================================================= */
+    function buildSystemPrompt() {
+      const files = VFS.list();
+      const memText = state.memory.length
+        ? state.memory.map((m) => `- ${m.key}: ${m.value}`).join('\n')
+        : '(noch keine Einträge)';
+      const optList = Object.entries(state.config.optionalTools)
+        .filter(([, v]) => v).map(([k]) => k).join(', ') || 'keine';
+
+      return [
+        'Du bist BrowserCode, ein autonomer Coding-Agent, der vollständig im Browser läuft.',
+        'Du verfügst über alle Standard-Tools (Read, Write, Edit, MultiEdit, LS, Glob, Grep, Delete, Bash, TodoWrite, NotebookEdit, WebFetch) sowie ein dauerhaftes Gedächtnis (MemoryWrite, MemoryRead, MemoryDelete).',
+        `Aktivierte optionale Tools: ${optList}.`,
+        '',
+        'Aktuelle Dateien im Workspace:',
+        files.length ? files.map((f) => `- ${f}`).join('\n') : '(leer)',
+        '',
+        'Dauerhaftes Gedächtnis (Memory):',
+        memText,
+        '',
+        'Richtlinien:',
+        '- Nutze deine Tools proaktiv, um Dateien zu inspizieren, zu erstellen, zu bearbeiten und Ergebnisse zu verifizieren.',
+        '- Wenn der Nutzer wichtige Präferenzen, Fakten oder Projektdetails nennt, speichere sie mit MemoryWrite im Gedächtnis.',
+        '- Bei komplexeren Aufgaben nutze TodoWrite zur Strukturierung.',
+        '- Antworte klar, präzise und in der Sprache des Nutzers.',
+        state.config.systemPrompt ? `\nZusätzliche Anweisungen des Nutzers:\n${state.config.systemPrompt}` : '',
+      ].join('\n');
+    }
+
+    function buildApiMessages(includeImages = true) {
+      const msgs = [{ role: 'system', content: buildSystemPrompt() }];
+      for (const m of state.chat) {
+        if (m.role === 'user') {
+          const imgAtts = includeImages ? (m.attachments || []).filter((a) => isImageFile(a.name, a.mime) && a.content.startsWith('data:')) : [];
+          if (imgAtts.length > 0) {
+            const parts = [{ type: 'text', text: m.apiText || m.content || '' }];
+            for (const img of imgAtts) {
+              parts.push({ type: 'image_url', image_url: { url: img.content } });
+            }
+            msgs.push({ role: 'user', content: parts });
+          } else {
+            msgs.push({ role: 'user', content: m.apiText || m.content || '' });
+          }
+        } else if (m.role === 'assistant') {
+          const msgObj = { role: 'assistant', content: m.content || '' };
+          if (m.tool_calls && m.tool_calls.length) {
+            msgObj.tool_calls = m.tool_calls.map((tc) => ({
+              id: tc.id,
+              type: 'function',
+              function: { name: tc.name, arguments: tc.rawArgs || JSON.stringify(tc.args || {}) },
+            }));
+          }
+          msgs.push(msgObj);
+          // Immediately follow with tool result messages (strict OpenAI/Mistral ordering)
+          if (m.tool_calls && m.tool_calls.length) {
+            for (const tc of m.tool_calls) {
+              msgs.push({
+                role: 'tool',
+                tool_call_id: tc.id,
+                name: tc.name,
+                content: String(tc.result ?? tc.error ?? ''),
+              });
+            }
+          }
+        }
+      }
+      return msgs;
+    }
+
+    async function callChatApi(messages, tools, signal) {
+      const baseUrl = (state.config.baseUrl || DEFAULT_CONFIG.baseUrl).replace(/\/+$/, '');
+      const url = `${baseUrl}/chat/completions`;
+      const headers = {
+        'Content-Type': 'application/json',
+        'HTTP-Referer': location.href,
+        'X-Title': 'BrowserCode Agent',
+      };
+      if (state.config.apiKey?.trim()) {
+        headers['Authorization'] = `Bearer ${state.config.apiKey.trim()}`;
+      }
+
+      const payload = {
+        model: state.config.model || DEFAULT_CONFIG.model,
+        messages,
+        temperature: Number(state.config.temperature ?? 0.2),
+        tools: tools.length ? tools : undefined,
+        tool_choice: tools.length ? 'auto' : undefined,
+      };
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal,
+      });
+
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = null; }
+      if (!res.ok) {
+        const errMsg = data?.error?.message || data?.message || text || `HTTP ${res.status}`;
+        const err = new Error(errMsg);
+        err.status = res.status;
+        throw err;
+      }
+      return data;
+    }
+
+    async function runAgentLoop() {
+      if (state.isRunning) return;
+      state.isRunning = true;
+      state.abortController = new AbortController();
+      updateRunningUI(true, 'Denkt nach…');
+
+      const maxSteps = Math.max(1, Math.min(50, Number(state.config.maxSteps) || 20));
+      let includeImages = true;
+
+      try {
+        for (let step = 1; step <= maxSteps; step++) {
+          if (state.abortController.signal.aborted) break;
+          updateRunningUI(true, `Schritt ${step}/${maxSteps} — Anfrage an ${state.config.model}…`);
+
+          const tools = getActiveToolDefinitions();
+          let data;
+          try {
+            data = await callChatApi(buildApiMessages(includeImages), tools, state.abortController.signal);
+          } catch (err) {
+            // Auto-fallback to text-only if model doesn't support vision/image_url
+            if (includeImages && /image|vision|multimodal|content.*array/i.test(err.message || '')) {
+              includeImages = false;
+              toast('Modell unterstützt keine direkten Bild-Inputs — sende als Text-Referenz.', 'warn');
+              data = await callChatApi(buildApiMessages(false), tools, state.abortController.signal);
+            } else {
+              throw err;
+            }
+          }
+
+          const choice = data?.choices?.[0];
+          const msg = choice?.message;
+          if (!msg) throw new Error('Leere Antwort vom API-Provider erhalten.');
+
+          const rawToolCalls = msg.tool_calls || [];
+          const assistantEntry = {
+            id: uid('msg'),
+            role: 'assistant',
+            content: msg.content || '',
+            tool_calls: rawToolCalls.map((tc) => {
+              let parsed = {};
+              const rawArgs = tc.function?.arguments || '{}';
+              try { parsed = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs; } catch { parsed = { _raw: rawArgs }; }
+              return {
+                id: tc.id || uid('call'),
+                name: tc.function?.name || 'unknown',
+                rawArgs: typeof rawArgs === 'string' ? rawArgs : JSON.stringify(rawArgs),
+                args: parsed,
+                status: 'running',
+                result: null,
+                error: null,
+                durationMs: 0,
+              };
+            }),
+            timestamp: Date.now(),
+          };
+
+          state.chat.push(assistantEntry);
+          saveChat();
+          renderChat();
+
+          if (!assistantEntry.tool_calls.length) {
+            break; // Final answer reached
+          }
+
+          // Execute each tool call
+          for (const tc of assistantEntry.tool_calls) {
+            if (state.abortController.signal.aborted) break;
+            updateRunningUI(true, `Führt Tool aus: ${tc.name}…`);
+            const t0 = performance.now();
+            try {
+              const out = await executeTool(tc.name, tc.args);
+              tc.status = 'ok';
+              tc.result = String(out ?? '');
+            } catch (err) {
+              tc.status = 'error';
+              tc.error = `Fehler: ${err.message || String(err)}`;
+              tc.result = tc.error;
+            }
+            tc.durationMs = Math.round(performance.now() - t0);
+            saveChat();
+            renderChat();
+          }
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          toast('Agent-Durchlauf abgebrochen.', 'warn');
+        } else {
+          state.chat.push({
+            id: uid('msg'),
+            role: 'assistant',
+            content: `**API-Fehler:** ${err.message}\n\n*Tipp: Prüfe API Key, Base URL und Modell in den Einstellungen.*`,
+            tool_calls: [],
+            timestamp: Date.now(),
+          });
+          saveChat();
+          renderChat();
+          toast(err.message, 'error');
+        }
+      } finally {
+        state.isRunning = false;
+        state.abortController = null;
+        updateRunningUI(false, 'Bereit');
+      }
+    }
+
+    /* =========================================================================
+       9. SAFE MARKDOWN RENDERER
+       ========================================================================= */
+    function renderMarkdown(md) {
+      if (!md) return '';
+      const codeBlocks = [];
+      let text = String(md).replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
+        const idx = codeBlocks.length;
+        const safeCode = escapeHtml(code.replace(/\n$/, ''));
+        codeBlocks.push(
+          `<pre><div class="code-header"><span>${escapeHtml(lang || 'code')}</span><button class="btn btn-sm" data-copy-code="${idx}">Kopieren</button></div><code>${safeCode}</code></pre>`
+        );
+        return `@@CODEBLOCK_${idx}@@`;
+      });
+
+      text = escapeHtml(text);
+
+      // Images ![alt](url)
+      text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => {
+        const safeUrl = url.replace(/&amp;/g, '&');
+        return `<img src="${safeUrl}" alt="${alt}" data-lightbox="${safeUrl}" />`;
+      });
+
+      // Links [text](url)
+      text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+      // Inline code
+      text = text.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+      // Bold & italic
+      text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+      // Block-level processing
+      const lines = text.split('\n');
+      const out = [];
+      let inUl = false;
+      let inOl = false;
+      const closeLists = () => {
+        if (inUl) { out.push('</ul>'); inUl = false; }
+        if (inOl) { out.push('</ol>'); inOl = false; }
+      };
+
+      for (const line of lines) {
+        if (/^@@CODEBLOCK_\d+@@$/.test(line.trim())) {
+          closeLists();
+          out.push(line.trim());
+        } else if (/^###\s+(.*)$/.test(line)) {
+          closeLists();
+          out.push(`<h3>${line.replace(/^###\s+/, '')}</h3>`);
+        } else if (/^##\s+(.*)$/.test(line)) {
+          closeLists();
+          out.push(`<h2>${line.replace(/^##\s+/, '')}</h2>`);
+        } else if (/^#\s+(.*)$/.test(line)) {
+          closeLists();
+          out.push(`<h1>${line.replace(/^#\s+/, '')}</h1>`);
+        } else if (/^&gt;\s?(.*)$/.test(line)) {
+          closeLists();
+          out.push(`<blockquote>${line.replace(/^&gt;\s?/, '')}</blockquote>`);
+        } else if (/^\s*[-*]\s+(.*)$/.test(line)) {
+          if (inOl) { out.push('</ol>'); inOl = false; }
+          if (!inUl) { out.push('<ul>'); inUl = true; }
+          out.push(`<li>${line.replace(/^\s*[-*]\s+/, '')}</li>`);
+        } else if (/^\s*\d+\.\s+(.*)$/.test(line)) {
+          if (inUl) { out.push('</ul>'); inUl = false; }
+          if (!inOl) { out.push('<ol>'); inOl = true; }
+          out.push(`<li>${line.replace(/^\s*\d+\.\s+/, '')}</li>`);
+        } else if (line.trim() === '') {
+          closeLists();
+        } else {
+          closeLists();
+          out.push(`<p>${line}</p>`);
+        }
+      }
+      closeLists();
+
+      let html = out.join('\n');
+      html = html.replace(/@@CODEBLOCK_(\d+)@@/g, (_, i) => codeBlocks[Number(i)]);
+      return html;
+    }
+
+    /* =========================================================================
+       10. UI RENDERING
+       ========================================================================= */
+    function applyTheme() {
+      document.documentElement.setAttribute('data-theme', state.config.theme || 'dark');
+      $('#btnTheme').textContent = state.config.theme === 'light' ? '☾' : '☀';
+    }
+
+    function renderTopbar() {
+      $('#modelLabel').textContent = state.config.model || DEFAULT_CONFIG.model;
+      const dot = $('#statusDot');
+      if (!state.isRunning) {
+        dot.className = 'status-dot' + (state.config.apiKey ? '' : ' warn');
+        dot.title = state.config.apiKey ? 'API Key konfiguriert' : 'Kein API Key gesetzt';
+      }
+      $('#badgeGithub').classList.toggle('active', !!state.config.optionalTools.github);
+      $('#badgePython').classList.toggle('active', !!state.config.optionalTools.python);
+      $('#badgeJS').classList.toggle('active', !!state.config.optionalTools.javascript);
+      $('#badgeJava').classList.toggle('active', !!state.config.optionalTools.java);
+    }
+
+    function updateRunningUI(running, text) {
+      $('#btnSend').style.display = running ? 'none' : 'inline-flex';
+      $('#btnStop').style.display = running ? 'inline-flex' : 'none';
+      $('#agentStatusText').textContent = text;
+      const dot = $('#statusDot');
+      if (running) dot.className = 'status-dot busy';
+      else renderTopbar();
+    }
+
+    function renderFileList() {
+      const files = VFS.list();
+      $('#countFiles').textContent = files.length;
+      const container = $('#fileList');
+      if (!files.length) {
+        container.innerHTML = '<div class="empty-state">Keine Dateien im Workspace.<br/>Ziehe Dateien hierher oder klicke auf <b>+ Datei</b>.</div>';
+        return;
+      }
+      container.innerHTML = files.map((path) => {
+        const f = state.workspace[path];
+        const active = state.activeFile === path ? ' active' : '';
+        return `
+          <div class="file-item${active}" data-open-file="${escapeHtml(path)}">
+            <span class="file-icon">${fileIcon(path, f)}</span>
+            <span class="file-name" title="${escapeHtml(path)}">${escapeHtml(path)}</span>
+            <span class="file-meta">${formatBytes(getFileByteSize(f))}</span>
+            <span class="file-actions">
+              <button class="btn btn-sm btn-icon" data-dl-file="${escapeHtml(path)}" title="Herunterladen">↓</button>
+              <button class="btn btn-sm btn-icon" data-del-file="${escapeHtml(path)}" title="Löschen">✕</button>
+            </span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderMemory() {
+      $('#countMemory').textContent = state.memory.length;
+      const container = $('#memoryList');
+      if (!state.memory.length) {
+        container.innerHTML = '<div class="empty-state">Noch keine Gedächtnis-Einträge.<br/>Der Agent merkt sich wichtige Fakten automatisch oder du fügst sie oben hinzu.</div>';
+        return;
+      }
+      container.innerHTML = state.memory.map((m) => `
+        <div class="memory-card">
+          <div class="memory-card-head">
+            <span class="memory-key">${escapeHtml(m.key)}</span>
+            <button class="btn btn-sm btn-icon" data-del-mem="${escapeHtml(m.id)}" title="Löschen">✕</button>
+          </div>
+          <div class="memory-val">${escapeHtml(m.value)}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderTodos() {
+      $('#countTodos').textContent = state.todos.length;
+      const container = $('#todoList');
+      if (!state.todos.length) {
+        container.innerHTML = '<div class="empty-state">Keine aktiven Aufgaben.<br/>Der Agent nutzt <code>TodoWrite</code> für mehrschrittige Pläne.</div>';
+        return;
+      }
+      container.innerHTML = state.todos.map((t) => `
+        <div class="todo-item">
+          <span class="todo-badge ${escapeHtml(t.status)}">${escapeHtml(t.status.replace('_', ' '))}</span>
+          <span style="flex:1; ${t.status === 'completed' ? 'text-decoration:line-through; opacity:0.6;' : ''}">${escapeHtml(t.content)}</span>
+        </div>
+      `).join('');
+    }
+
+    function renderChat() {
+      const container = $('#chatMessages');
+      if (!state.chat.length) {
+        container.innerHTML = `
+          <div class="welcome-card">
+            <h1>BrowserCode Agent</h1>
+            <p>Agentic Coding Loop mit dauerhaftem Gedächtnis, Claude-Code-Tools (<code>Read</code>, <code>Write</code>, <code>Edit</code>, <code>Glob</code>, <code>Grep</code>, <code>Bash</code>, <code>TodoWrite</code>) und lokalem Workspace im Browser.</p>
+            ${!state.config.apiKey ? '<p style="color:var(--warn); font-size:12.5px;">Hinweis: Bitte hinterlege zuerst deinen OpenRouter / OpenAI API Key in den <b>Einstellungen</b>.</p>' : ''}
+            <div class="quick-prompts">
+              <button class="quick-prompt" data-prompt="Erstelle eine interaktive HTML/JS-Visualisierung als index_demo.html im Workspace und erkläre mir den Code.">
+                <strong>Web-Demo erstellen</strong>
+                Erstellt eine neue Datei im Workspace
+              </button>
+              <button class="quick-prompt" data-prompt="Erstelle ein modernes SVG-Diagramm (architektur.svg) im Workspace, das einen Agentic Loop zeigt.">
+                <strong>SVG-Grafik generieren</strong>
+                Direkt in der Bildvorschau ansehen
+              </button>
+              <button class="quick-prompt" data-prompt="Liste alle Dateien im Workspace auf, lies die README.md und merke dir im Gedächtnis, dass ich auf Deutsch antworte.">
+                <strong>Workspace &amp; Gedächtnis testen</strong>
+                Nutzt LS, Read &amp; MemoryWrite
+              </button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = state.chat.map((m) => {
+        const time = new Date(m.timestamp || Date.now()).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        if (m.role === 'user') {
+          const attsHtml = (m.attachments || []).length ? `
+            <div class="msg-attachments">
+              ${m.attachments.map((a) => {
+                if (isImageFile(a.name, a.mime) && a.content.startsWith('data:')) {
+                  return `<img class="msg-att-img" src="${a.content}" alt="${escapeHtml(a.name)}" data-lightbox="${a.content}" title="${escapeHtml(a.name)}" />`;
+                }
+                return `<span class="msg-att-chip" data-open-file="${escapeHtml(a.workspacePath || '')}">📎 ${escapeHtml(a.name)} (${formatBytes(a.size || 0)})</span>`;
+              }).join('')}
+            </div>
+          ` : '';
+          return `
+            <div class="msg-row user">
+              <div class="msg-meta"><span>Du</span><span>${time}</span></div>
+              <div class="msg-bubble">
+                <div class="md-body">${renderMarkdown(m.content)}</div>
+                ${attsHtml}
+              </div>
+            </div>
+          `;
+        } else {
+          const toolsHtml = (m.tool_calls || []).length ? `
+            <div class="tool-calls-wrap">
+              ${m.tool_calls.map((tc) => {
+                const summary = tc.args?.file_path || tc.args?.command || tc.args?.pattern || tc.args?.key || tc.args?.path || tc.args?.title || '';
+                const statusLabel = tc.status === 'running' ? 'läuft…' : tc.status === 'error' ? 'fehler' : `${tc.durationMs || 0}ms`;
+                // Show inline image if tool wrote/read an image
+                let imgPreview = '';
+                const targetPath = tc.args?.file_path;
+                if (targetPath && VFS.exists(targetPath) && isImageFile(targetPath, VFS.get(targetPath).mime)) {
+                  const url = getImageDataUrl(targetPath, VFS.get(targetPath));
+                  if (url) imgPreview = `<img src="${url}" data-lightbox="${url}" style="max-height:180px; margin-top:6px; border-radius:6px; cursor:zoom-in;" alt="${escapeHtml(targetPath)}" />`;
+                }
+                return `
+                  <div class="tool-card ${tc.status === 'error' ? 'open' : ''}">
+                    <div class="tool-card-head" data-toggle-tool>
+                      <div class="tool-card-left">
+                        <span class="tool-name">${escapeHtml(tc.name)}</span>
+                        <span class="tool-summary">${escapeHtml(String(summary).slice(0, 80))}</span>
+                      </div>
+                      <span class="tool-status ${tc.status}">${statusLabel}</span>
+                    </div>
+                    <div class="tool-card-body">
+                      <div class="tool-section-label">Argumente</div>
+                      <div class="tool-pre">${escapeHtml(JSON.stringify(tc.args, null, 2))}</div>
+                      <div class="tool-section-label">Ergebnis</div>
+                      <div class="tool-pre">${escapeHtml(tc.result ?? '(wartet…)')}</div>
+                      ${imgPreview}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          ` : '';
+
+          return `
+            <div class="msg-row assistant">
+              <div class="msg-meta"><span>Agent</span><span>${time}</span></div>
+              <div class="msg-bubble">
+                ${m.content ? `<div class="md-body">${renderMarkdown(m.content)}</div>` : ''}
+                ${toolsHtml}
+              </div>
+            </div>
+          `;
+        }
+      }).join('');
+
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function renderPendingAttachments() {
+      const box = $('#composerAttachments');
+      box.innerHTML = state.pendingAttachments.map((a, idx) => `
+        <div class="pending-att">
+          ${isImageFile(a.name, a.mime) && a.content.startsWith('data:') ? `<img src="${a.content}" alt="" />` : '<span>📄</span>'}
+          <span>${escapeHtml(a.name)}</span>
+          <button data-remove-att="${idx}" title="Entfernen">✕</button>
+        </div>
+      `).join('');
+    }
+
+    /* =========================================================================
+       11. RIGHT PREVIEW / EDITOR PANEL (IMAGES, SVG, HTML, MARKDOWN, CODE)
+       ========================================================================= */
+    function openPreview(path) {
+      const f = VFS.get(path);
+      if (!f) return;
+      state.activeFile = path;
+      state.previewMode = 'auto';
+      state.imageZoom = 1;
+      $('#previewPanel').classList.remove('hidden');
+      renderFileList();
+      renderPreview(path);
+    }
+
+    function closePreview() {
+      state.activeFile = null;
+      $('#previewPanel').classList.add('hidden');
+      renderFileList();
+    }
+
+    function renderPreview(path) {
+      const f = VFS.get(path);
+      if (!f) { closePreview(); return; }
+
+      $('#previewTitle').textContent = path;
+      const ext = getExt(path);
+      const isImg = isImageFile(path, f.mime);
+      const isSvg = ext === 'svg' || f.mime === 'image/svg+xml';
+      const isMd = ext === 'md';
+      const isHtml = ext === 'html' || ext === 'htm';
+
+      let mode = state.previewMode;
+      if (mode === 'auto') {
+        if (isImg) mode = 'preview';
+        else mode = 'source';
+      }
+
+      const actions = [];
+      if (isSvg || isMd || isHtml) {
+        actions.push(`<button class="btn btn-sm btn-outline" id="btnTogglePreviewMode">${mode === 'preview' ? 'Quellcode' : 'Vorschau'}</button>`);
+      }
+      if (isImg && mode === 'preview') {
+        actions.push(`<button class="btn btn-sm btn-icon" id="btnZoomOut" title="Verkleinern">−</button>`);
+        actions.push(`<button class="btn btn-sm btn-icon" id="btnZoomIn" title="Vergrößern">+</button>`);
+      }
+      actions.push(`<button class="btn btn-sm btn-icon" id="btnPreviewDownload" title="Datei herunterladen">↓</button>`);
+      actions.push(`<button class="btn btn-sm btn-icon" id="btnClosePreview" title="Schließen">✕</button>`);
+      $('#previewActions').innerHTML = actions.join('');
+
+      const body = $('#previewBody');
+      if (isImg && mode === 'preview') {
+        const src = getImageDataUrl(path, f);
+        body.innerHTML = `
+          <div class="image-stage">
+            <img id="previewImgEl" src="${src}" alt="${escapeHtml(path)}" style="transform: scale(${state.imageZoom});" />
+          </div>
+          <div class="image-info-bar">
+            <span id="imgDims">Lade Abmessungen…</span>
+            <span>${escapeHtml(f.mime)} · ${formatBytes(getFileByteSize(f))}</span>
+          </div>
+        `;
+        const imgEl = $('#previewImgEl');
+        imgEl.onload = () => {
+          const dims = $('#imgDims');
+          if (dims) dims.textContent = `${imgEl.naturalWidth} × ${imgEl.naturalHeight} px · ${Math.round(state.imageZoom * 100)}%`;
+        };
+        imgEl.onclick = () => openLightbox(src);
+      } else if (isMd && mode === 'preview') {
+        body.innerHTML = `<div class="md-preview-pane md-body">${renderMarkdown(f.content)}</div>`;
+      } else if (isHtml && mode === 'preview') {
+        body.innerHTML = `<iframe class="html-sandbox" sandbox="allow-scripts" srcdoc="${escapeHtml(f.content)}"></iframe>`;
+      } else if (f.isBinary) {
+        body.innerHTML = `<div class="empty-state">Binärdatei (${escapeHtml(f.mime)}, ${formatBytes(getFileByteSize(f))}).<br/>Klicke oben auf ↓ zum Herunterladen.</div>`;
+      } else {
+        body.innerHTML = `<textarea class="code-editor" id="codeEditor" spellcheck="false"></textarea>`;
+        const ed = $('#codeEditor');
+        ed.value = f.content;
+        ed.addEventListener('input', () => {
+          state.workspace[path].content = ed.value;
+          state.workspace[path].updatedAt = Date.now();
+          saveWorkspace();
+          renderFileList();
+        });
+      }
+
+      $('#btnClosePreview')?.addEventListener('click', closePreview);
+      $('#btnPreviewDownload')?.addEventListener('click', () => VFS.downloadFile(path));
+      $('#btnTogglePreviewMode')?.addEventListener('click', () => {
+        state.previewMode = mode === 'preview' ? 'source' : 'preview';
+        renderPreview(path);
+      });
+      $('#btnZoomIn')?.addEventListener('click', () => {
+        state.imageZoom = Math.min(4, state.imageZoom + 0.25);
+        renderPreview(path);
+      });
+      $('#btnZoomOut')?.addEventListener('click', () => {
+        state.imageZoom = Math.max(0.25, state.imageZoom - 0.25);
+        renderPreview(path);
+      });
+    }
+
+    function openLightbox(src) {
+      $('#lightboxImg').src = src;
+      $('#lightboxModal').classList.add('open');
+    }
+
+    /* =========================================================================
+       12. FILE UPLOAD HELPERS (WORKSPACE & CHAT)
+       ========================================================================= */
+    function readBrowserFile(file) {
+      return new Promise((resolve, reject) => {
+        const mime = file.type || guessMime(file.name);
+        const isText = mime.startsWith('text/') ||
+          ['application/json', 'application/xml', 'image/svg+xml', 'application/javascript', 'application/x-ipynb+json'].includes(mime) ||
+          ['md', 'txt', 'js', 'ts', 'py', 'java', 'html', 'css', 'json', 'svg', 'xml', 'csv', 'yml', 'yaml', 'sh', 'c', 'cpp', 'rs', 'go', 'sql'].includes(getExt(file.name));
+
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error(`Fehler beim Lesen von ${file.name}`));
+        if (isText) {
+          reader.onload = () => resolve({ name: file.name, mime, isBinary: false, content: String(reader.result || ''), size: file.size });
+          reader.readAsText(file);
+        } else {
+          reader.onload = () => resolve({ name: file.name, mime, isBinary: true, content: String(reader.result || ''), size: file.size });
+          reader.readAsDataURL(file);
+        }
+      });
+    }
+
+    async function handleWorkspaceUpload(fileList) {
+      let count = 0;
+      let lastPath = null;
+      for (const file of Array.from(fileList)) {
+        try {
+          const parsed = await readBrowserFile(file);
+          const relPath = file.webkitRelativePath || parsed.name;
+          lastPath = VFS.write(relPath, parsed.content, { isBinary: parsed.isBinary, mime: parsed.mime });
+          count++;
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      }
+      if (count > 0) {
+        toast(`${count} Datei(en) in den Workspace hochgeladen.`, 'success');
+        if (lastPath) openPreview(lastPath);
+      }
+    }
+
+    async function handleChatAttach(fileList) {
+      for (const file of Array.from(fileList)) {
+        try {
+          const parsed = await readBrowserFile(file);
+          state.pendingAttachments.push(parsed);
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      }
+      renderPendingAttachments();
+    }
+
+    /* =========================================================================
+       13. SEND MESSAGE FLOW
+       ========================================================================= */
+    async function sendUserMessage(overrideText = null) {
+      if (state.isRunning) return;
+      const input = $('#chatInput');
+      const text = overrideText !== null ? overrideText.trim() : input.value.trim();
+      const atts = [...state.pendingAttachments];
+
+      if (!text && !atts.length) return;
+
+      // Also save uploaded chat files into /uploads/ so agent tools can inspect/edit them
+      const savedAtts = [];
+      const attContextLines = [];
+      for (const a of atts) {
+        const wsPath = VFS.write(`uploads/${a.name}`, a.content, { isBinary: a.isBinary, mime: a.mime });
+        savedAtts.push({ ...a, workspacePath: wsPath });
+        if (!a.isBinary && a.content.length <= 16000) {
+          attContextLines.push(`\n\n--- Angehängte Datei: ${wsPath} ---\n${a.content}\n--- Ende ${wsPath} ---`);
+        } else {
+          attContextLines.push(`\n[Angehängte Datei im Workspace gespeichert: ${wsPath} (${a.mime}, ${formatBytes(a.size)})]`);
+        }
+      }
+
+      const displayContent = text || (atts.length ? `(${atts.length} Datei(en) angehängt)` : '');
+      const apiText = (text || 'Bitte analysiere die angehängte(n) Datei(en).') + attContextLines.join('');
+
+      state.chat.push({
+        id: uid('msg'),
+        role: 'user',
+        content: displayContent,
+        apiText,
+        attachments: savedAtts,
+        timestamp: Date.now(),
+      });
+
+      input.value = '';
+      input.style.height = 'auto';
+      state.pendingAttachments = [];
+      renderPendingAttachments();
+      saveChat();
+      renderChat();
+
+      await runAgentLoop();
+    }
+
+    /* =========================================================================
+       14. SETTINGS MODAL & BACKUP
+       ========================================================================= */
+    function openSettings() {
+      $('#cfgBaseUrl').value = state.config.baseUrl;
+      $('#cfgApiKey').value = state.config.apiKey;
+      $('#cfgModel').value = state.config.model;
+      $('#cfgMaxSteps').value = state.config.maxSteps;
+      $('#cfgTemp').value = state.config.temperature;
+      $('#cfgSystemPrompt').value = state.config.systemPrompt || '';
+      $('#optGithub').checked = !!state.config.optionalTools.github;
+      $('#optPython').checked = !!state.config.optionalTools.python;
+      $('#optJavascript').checked = !!state.config.optionalTools.javascript;
+      $('#optJava').checked = !!state.config.optionalTools.java;
+      $('#cfgGithubToken').value = state.config.githubToken || '';
+      $('#cfgGithubRepo').value = state.config.githubRepo || '';
+      $('#githubSubfields').classList.toggle('hidden', !$('#optGithub').checked);
+      $('#settingsModal').classList.add('open');
+    }
+
+    function saveSettingsFromModal() {
+      state.config.baseUrl = $('#cfgBaseUrl').value.trim() || DEFAULT_CONFIG.baseUrl;
+      state.config.apiKey = $('#cfgApiKey').value.trim();
+      state.config.model = $('#cfgModel').value.trim() || DEFAULT_CONFIG.model;
+      state.config.maxSteps = Math.max(1, Math.min(50, parseInt($('#cfgMaxSteps').value, 10) || 20));
+      state.config.temperature = Math.max(0, Math.min(2, parseFloat($('#cfgTemp').value) || 0.2));
+      state.config.systemPrompt = $('#cfgSystemPrompt').value.trim();
+      state.config.optionalTools = {
+        github: $('#optGithub').checked,
+        python: $('#optPython').checked,
+        javascript: $('#optJavascript').checked,
+        java: $('#optJava').checked,
+      };
+      state.config.githubToken = $('#cfgGithubToken').value.trim();
+      state.config.githubRepo = $('#cfgGithubRepo').value.trim();
+
+      saveConfig();
+      renderTopbar();
+      renderChat();
+      $('#settingsModal').classList.remove('open');
+      toast('Einstellungen gespeichert.', 'success');
+    }
+
+    /* =========================================================================
+       15. EVENT BINDINGS & INIT
+       ========================================================================= */
+    function bindEvents() {
+      // Sidebar toggle & tabs
+      $('#btnToggleSidebar').addEventListener('click', () => $('#sidebar').classList.toggle('collapsed'));
+      $$('.sidebar-tab').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          $$('.sidebar-tab').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          const tab = btn.dataset.tab;
+          $('#tabFiles').style.display = tab === 'files' ? 'flex' : 'none';
+          $('#tabMemory').style.display = tab === 'memory' ? 'flex' : 'none';
+          $('#tabTodos').style.display = tab === 'todos' ? 'flex' : 'none';
+        });
+      });
+
+      // Topbar optional tool quick-toggles
+      $$('#optionalToolsBar .tool-badge').forEach((badge) => {
+        badge.addEventListener('click', () => {
+          const key = badge.dataset.opt;
+          if (key === 'github' && !state.config.optionalTools.github && !state.config.githubToken) {
+            state.config.optionalTools.github = true;
+            saveConfig();
+            renderTopbar();
+            openSettings();
+            return;
+          }
+          state.config.optionalTools[key] = !state.config.optionalTools[key];
+          saveConfig();
+          renderTopbar();
+          toast(`${badge.textContent} ${state.config.optionalTools[key] ? 'aktiviert' : 'deaktiviert'}.`, 'info');
+        });
+      });
+
+      // Topbar buttons
+      $('#btnTheme').addEventListener('click', () => {
+        state.config.theme = state.config.theme === 'dark' ? 'light' : 'dark';
+        saveConfig();
+        applyTheme();
+      });
+      $('#btnSettings').addEventListener('click', openSettings);
+      $('#btnModelPill').addEventListener('click', openSettings);
+      $('#btnNewChat').addEventListener('click', () => {
+        if (state.isRunning) return;
+        if (state.chat.length && !confirm('Chatverlauf wirklich leeren? (Workspace & Gedächtnis bleiben erhalten)')) return;
+        state.chat = [];
+        saveChat();
+        renderChat();
+        toast('Neuer Chat gestartet.', 'info');
+      });
+
+      // Settings modal
+      $('#optGithub').addEventListener('change', (e) => {
+        $('#githubSubfields').classList.toggle('hidden', !e.target.checked);
+      });
+      $('#btnCloseSettings').addEventListener('click', () => $('#settingsModal').classList.remove('open'));
+      $('#btnCancelSettings').addEventListener('click', () => $('#settingsModal').classList.remove('open'));
+      $('#btnSaveSettings').addEventListener('click', saveSettingsFromModal);
+      $('#settingsModal').addEventListener('click', (e) => {
+        if (e.target.id === 'settingsModal') $('#settingsModal').classList.remove('open');
+      });
+
+      // Backup export / import / reset
+      $('#btnExportBackup').addEventListener('click', () => {
+        const dump = {
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          config: state.config,
+          workspace: state.workspace,
+          chat: state.chat,
+          memory: state.memory,
+          todos: state.todos,
+        };
+        const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `browsercode-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast('Backup exportiert.', 'success');
+      });
+      $('#btnImportBackup').addEventListener('click', () => $('#inputImportBackup').click());
+      $('#inputImportBackup').addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          const data = JSON.parse(await file.text());
+          if (data.config) state.config = { ...structuredClone(DEFAULT_CONFIG), ...data.config };
+          if (data.workspace) state.workspace = data.workspace;
+          if (data.chat) state.chat = data.chat;
+          if (data.memory) state.memory = data.memory;
+          if (data.todos) state.todos = data.todos;
+          saveConfig(); saveWorkspace(); saveChat(); saveMemory(); saveTodos();
+          applyTheme(); renderTopbar(); renderFileList(); renderMemory(); renderTodos(); renderChat();
+          $('#settingsModal').classList.remove('open');
+          toast('Backup erfolgreich importiert.', 'success');
+        } catch (err) {
+          toast('Ungültige Backup-Datei: ' + err.message, 'error');
+        }
+        e.target.value = '';
+      });
+      $('#btnResetAll').addEventListener('click', () => {
+        if (!confirm('Wirklich ALLES (Workspace, Chat, Gedächtnis, Konfiguration) zurücksetzen?')) return;
+        for (const k of Object.values(STORAGE_KEYS)) localStorage.removeItem(k);
+        location.reload();
+      });
+
+      // Workspace toolbar
+      $('#btnNewFile').addEventListener('click', () => {
+        const name = prompt('Dateipfad (z. B. src/app.js oder notizen.md):');
+        if (!name || !name.trim()) return;
+        const norm = VFS.write(name.trim(), '');
+        openPreview(norm);
+      });
+      $('#btnUploadWs').addEventListener('click', () => $('#inputUploadWs').click());
+      $('#inputUploadWs').addEventListener('change', (e) => {
+        if (e.target.files?.length) handleWorkspaceUpload(e.target.files);
+        e.target.value = '';
+      });
+      $('#btnDownloadZip').addEventListener('click', () => VFS.downloadZip());
+      $('#btnClearWs').addEventListener('click', () => {
+        if (!confirm('Alle Dateien im Workspace löschen?')) return;
+        state.workspace = {};
+        closePreview();
+        saveWorkspace();
+        renderFileList();
+      });
+
+      // Workspace file list delegation
+      $('#fileList').addEventListener('click', (e) => {
+        const dl = e.target.closest('[data-dl-file]');
+        if (dl) { e.stopPropagation(); VFS.downloadFile(dl.dataset.dlFile); return; }
+        const del = e.target.closest('[data-del-file]');
+        if (del) {
+          e.stopPropagation();
+          if (confirm(`"${del.dataset.delFile}" löschen?`)) VFS.delete(del.dataset.delFile);
+          return;
+        }
+        const item = e.target.closest('[data-open-file]');
+        if (item) openPreview(item.dataset.openFile);
+      });
+
+      // Drag & drop onto Workspace sidebar
+      const fileListEl = $('#fileList');
+      fileListEl.addEventListener('dragover', (e) => { e.preventDefault(); fileListEl.classList.add('drop-active'); });
+      fileListEl.addEventListener('dragleave', () => fileListEl.classList.remove('drop-active'));
+      fileListEl.addEventListener('drop', (e) => {
+        e.preventDefault();
+        fileListEl.classList.remove('drop-active');
+        if (e.dataTransfer.files?.length) handleWorkspaceUpload(e.dataTransfer.files);
+      });
+
+      // Memory controls
+      $('#btnAddMemory').addEventListener('click', () => {
+        const key = prompt('Schlüssel (z. B. sprache, stack):');
+        if (!key || !key.trim()) return;
+        const val = prompt('Wert / Information:');
+        if (val === null) return;
+        state.memory.push({ id: uid('mem'), key: key.trim(), value: val.trim(), updatedAt: Date.now() });
+        saveMemory();
+        renderMemory();
+      });
+      $('#btnClearMemory').addEventListener('click', () => {
+        if (!confirm('Gesamtes Gedächtnis löschen?')) return;
+        state.memory = [];
+        saveMemory();
+        renderMemory();
+      });
+      $('#memoryList').addEventListener('click', (e) => {
+        const del = e.target.closest('[data-del-mem]');
+        if (del) {
+          state.memory = state.memory.filter((m) => m.id !== del.dataset.delMem);
+          saveMemory();
+          renderMemory();
+        }
+      });
+
+      // Todos clear
+      $('#btnClearTodos').addEventListener('click', () => {
+        state.todos = [];
+        saveTodos();
+        renderTodos();
+      });
+
+      // Chat composer: Enter sends, Shift+Enter newline
+      const chatInput = $('#chatInput');
+      chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendUserMessage();
+        }
+      });
+      chatInput.addEventListener('input', () => {
+        chatInput.style.height = 'auto';
+        chatInput.style.height = Math.min(180, chatInput.scrollHeight) + 'px';
+      });
+      chatInput.addEventListener('paste', (e) => {
+        const files = Array.from(e.clipboardData?.files || []);
+        if (files.length) {
+          e.preventDefault();
+          handleChatAttach(files);
+        }
+      });
+
+      $('#btnSend').addEventListener('click', () => sendUserMessage());
+      $('#btnStop').addEventListener('click', () => state.abortController?.abort());
+      $('#btnAttachChat').addEventListener('click', () => $('#inputAttachChat').click());
+      $('#inputAttachChat').addEventListener('change', (e) => {
+        if (e.target.files?.length) handleChatAttach(e.target.files);
+        e.target.value = '';
+      });
+      $('#composerAttachments').addEventListener('click', (e) => {
+        const rm = e.target.closest('[data-remove-att]');
+        if (rm) {
+          state.pendingAttachments.splice(Number(rm.dataset.removeAtt), 1);
+          renderPendingAttachments();
+        }
+      });
+
+      // Drag & drop onto Chat panel
+      const chatPanel = $('#chatPanel');
+      chatPanel.addEventListener('dragover', (e) => { e.preventDefault(); $('#composerBox').classList.add('drop-active'); });
+      chatPanel.addEventListener('dragleave', (e) => {
+        if (!chatPanel.contains(e.relatedTarget)) $('#composerBox').classList.remove('drop-active');
+      });
+      chatPanel.addEventListener('drop', (e) => {
+        e.preventDefault();
+        $('#composerBox').classList.remove('drop-active');
+        if (e.dataTransfer.files?.length) handleChatAttach(e.dataTransfer.files);
+      });
+
+      // Chat messages delegation (tool cards, lightbox, copy code, quick prompts, open file)
+      $('#chatMessages').addEventListener('click', (e) => {
+        const qp = e.target.closest('[data-prompt]');
+        if (qp) { sendUserMessage(qp.dataset.prompt); return; }
+
+        const toggle = e.target.closest('[data-toggle-tool]');
+        if (toggle) { toggle.closest('.tool-card').classList.toggle('open'); return; }
+
+        const lb = e.target.closest('[data-lightbox]');
+        if (lb) { openLightbox(lb.dataset.lightbox); return; }
+
+        const openF = e.target.closest('[data-open-file]');
+        if (openF && openF.dataset.openFile) { openPreview(openF.dataset.openFile); return; }
+
+        const copyBtn = e.target.closest('[data-copy-code]');
+        if (copyBtn) {
+          const code = copyBtn.closest('pre')?.querySelector('code')?.textContent || '';
+          navigator.clipboard.writeText(code).then(() => toast('Code kopiert.', 'success'));
+        }
+      });
+
+      // Lightbox close
+      $('#lightboxModal').addEventListener('click', () => $('#lightboxModal').classList.remove('open'));
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          $('#lightboxModal').classList.remove('open');
+          $('#settingsModal').classList.remove('open');
+        }
+      });
+    }
+
+    function init() {
+      loadState();
+      applyTheme();
+      renderTopbar();
+      renderFileList();
+      renderMemory();
+      renderTodos();
+      renderChat();
+      updateStorageMeter();
+      bindEvents();
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>
