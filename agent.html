@@ -4414,10 +4414,13 @@
               else if (node.nodeType === Node.ELEMENT_NODE) {
                 if (node.matches('.code-header, script, style, iframe, svg, img')) continue;
                 if (allowed.has(node.tagName)) {
-                  // A standalone LI can produce a phantom bullet in rich-text editors.
-                  const tag = node.tagName === 'LI' && !['UL', 'OL'].includes(target.tagName)
-                    ? 'p' : node.tagName.toLowerCase();
-                  const child = document.createElement(tag);
+                  // Word interprets semantic lists as native lists on paste.
+                  // Keep their content but omit list markup from clipboard HTML.
+                  if (node.tagName === 'UL' || node.tagName === 'OL') {
+                    appendSafe(node, target);
+                    continue;
+                  }
+                  const child = document.createElement(node.tagName === 'LI' ? 'div' : node.tagName.toLowerCase());
                   appendSafe(node, child);
                   target.append(child);
                 } else appendSafe(node, target);
