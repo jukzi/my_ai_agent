@@ -1388,7 +1388,9 @@
           </div>
           <div class="field">
             <label for="cfgModel">Modell (Auswahl oder Freitext)</label>
-                        <button type="button" class="btn btn-outline" id="btnCheckApi">API prüfen &amp; Modelle laden</button>
+                        <button type="button" class="btn btn-outline" id="btnCheckApi">Modelle laden</button>
+            <button type="button" class="btn btn-outline" id="btnCheckApiToken">API-Token prüfen</button>
+            <span id="apiTokenStatus" class="field-hint" role="status"></span>
             <span id="apiCheckStatus" class="field-hint" role="status"></span>
             <div class="model-picker"><input type="text" id="cfgModel" placeholder="mistralai/mistral-nemo" /><button type="button" class="btn btn-outline" id="btnModels" aria-label="Geladene Modelle anzeigen" aria-expanded="false" aria-controls="cfgModels" disabled>▾</button><div id="cfgModels" hidden></div></div>
           </div>
@@ -4049,8 +4051,9 @@
         const button = $(buttonId);
         const status = $(statusId);
         let revision = 0;
-        $(buttonId === '#btnCheckApi' ? '#cfgBaseUrl' : '#cfgGithubRepo').addEventListener('input', reset);
-        $(buttonId === '#btnCheckApi' ? '#cfgApiKey' : '#cfgGithubToken').addEventListener('input', reset);
+        $(buttonId !== '#btnCheckGithub' ? '#cfgBaseUrl' : '#cfgGithubRepo').addEventListener('input', reset);
+        $(buttonId !== '#btnCheckGithub' ? '#cfgApiKey' : '#cfgGithubToken').addEventListener('input', reset);
+        if (buttonId === '#btnCheckApiToken') $('#cfgModel').addEventListener('input', reset);
         $('#btnSettings').addEventListener('click', reset);
         $('#btnModelPill').addEventListener('click', reset);
         function reset() { revision++; status.textContent = ''; apply([]); }
@@ -4078,14 +4081,32 @@
         if (!response.ok) throw new Error('Verbindung fehlgeschlagen (HTTP ' + response.status + ').');
         return response.json();
       }
-      bindCheck('#btnCheckApi', '#apiCheckStatus',
-        () => [$('#cfgBaseUrl').value.trim(), $('#cfgApiKey').value.trim()],
-        async (base, token) => {
+      function apiEndpoint(base, endpoint) {
           const url = new URL(base || DEFAULT_CONFIG.baseUrl);
           if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
             throw new Error('Ungültige API Base URL.');
           }
-          url.pathname = url.pathname.replace(/\/+$/, '') + '/models';
+          url.pathname = url.pathname.replace(/\/+$/, '') + endpoint;
+        return url;
+      }
+      bindCheck('#btnCheckApiToken', '#apiTokenStatus',
+        () => [$('#cfgBaseUrl').value.trim(), $('#cfgApiKey').value.trim(), $('#cfgModel').value.trim() || DEFAULT_CONFIG.model],
+        async (base, token, model) => {
+          if (!token) throw new Error('Bitte einen API-Token eingeben.');
+          const response = await fetch(apiEndpoint(base, '/chat/completions'), {
+            method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15000),
+            headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model, messages: [{ role: 'user', content: 'OK' }], max_tokens: 1 }),
+          });
+          if (!response.ok) throw new Error('Chat-Test fehlgeschlagen (HTTP ' + response.status + ').');
+          const data = await response.json();
+          if (!data?.choices?.[0]?.message) throw new Error('Keine gültige Chat-Antwort erhalten.');
+          return { message: 'Chat-Test erfolgreich: ' + model };
+        });
+      bindCheck('#btnCheckApi', '#apiCheckStatus',
+        () => [$('#cfgBaseUrl').value.trim(), $('#cfgApiKey').value.trim()],
+        async (base, token) => {
+          const url = apiEndpoint(base, '/models');
           const data = await checkEndpoint(url, token);
           if (!Array.isArray(data?.data)) throw new Error('Der Anbieter hat keine Modellliste zurückgegeben.');
           const models = [...new Set(data.data.map(m => m?.id).filter(id => typeof id === 'string' && id))].sort();
@@ -4097,6 +4118,7 @@
             option.textContent = id;
             option.addEventListener('click', () => {
               $('#cfgModel').value = id;
+              $('#cfgModel').dispatchEvent(new Event('input'));
               closeModels();
               $('#cfgModel').focus();
             });
