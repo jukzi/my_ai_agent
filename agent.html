@@ -2716,7 +2716,7 @@
         let data;
         try { data = JSON.parse(text); } catch { data = text; }
         if (!res.ok) {
-          throw new Error(`GitHub API ${res.status}: ${data?.message || text}`);
+          throw Object.assign(new Error(`GitHub API ${res.status}: ${data?.message || text}`), {status:res.status});
         }
         return data;
       },
@@ -3334,11 +3334,11 @@
           const limit = text => text.slice(0, 12000) + (text.length > 12000 ? '\n… [gekürzt]' : '');
           if (name === 'JinaReader') {
             const reader = await fetch('https://r.jina.ai/' + url.href, { ...options(), redirect: 'error' });
-            if (!reader.ok) throw new Error('Jina Reader: HTTP ' + reader.status);
+            if (!reader.ok) throw Object.assign(new Error('Jina Reader: HTTP ' + reader.status), {status:reader.status});
             return 'Quelle: Jina Reader (externer Abruf)\n' + limit(await reader.text());
           }
           const response = await fetch(url.href, options());
-          if (!response.ok) throw new Error('WebFetch: HTTP ' + response.status);
+          if (!response.ok) throw Object.assign(new Error('WebFetch: HTTP ' + response.status), {status:response.status});
           const text = await response.text();
           const clean = /text\/html/i.test(response.headers.get('content-type') || '')
             ? text.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -3603,18 +3603,18 @@
       runs.set(chat, run);
       syncRun();
       const status = text => { run.text = text; if (chat === activeChat) syncRun(); };
-      async function request(messages, tools) {
+      async function retry(operation, label) {
         const signal = controller.signal;
         for (let attempt = 0; ; attempt++) {
           signal.throwIfAborted();
-          try { return await callChatApi(messages, tools, signal); }
+          try { return await operation(); }
           catch (err) {
             signal.throwIfAborted();
             const code = err.status;
             const transient = code === 408 || code === 429 || (code >= 500 && code <= 599) ||
               err.name === 'TimeoutError' || (err.name === 'TypeError' && /fetch|network|load failed/i.test(err.message));
             if (!transient || attempt >= 3) throw err;
-            status('Erneuter API-Versuch ' + (attempt + 1) + '/3 in 3 Sekunden…');
+            status(label + ': erneuter Versuch ' + (attempt + 1) + '/3 in 3 Sekunden…');
             await new Promise((resolve, reject) => {
               const timer = setTimeout(() => { signal.removeEventListener('abort', stop); resolve(); }, 3000);
               function stop() { clearTimeout(timer); reject(signal.reason); }
@@ -3623,6 +3623,8 @@
           }
         }
       }
+      const request = (messages, tools) => retry(() => callChatApi(messages, tools, controller.signal), 'API');
+      const readOnly = new Set(['Read','LS','Glob','Grep','MemoryRead','WebFetch','JinaReader','GitHub_ReadFile']);
       const maxSteps = Math.max(1, Math.min(50, Number(state.config.maxSteps) || 20));
       let includeImages = true;
 
@@ -3687,7 +3689,8 @@
             status(`Führt Tool aus: ${tc.name}…`);
             const t0 = performance.now();
             try {
-              const out = await executeTool(tc.name, tc.args);
+              const execute = () => executeTool(tc.name, tc.args);
+              const out = await (readOnly.has(tc.name) ? retry(execute, tc.name) : execute());
               tc.status = 'ok';
               tc.result = String(out ?? '');
             } catch (err) {
