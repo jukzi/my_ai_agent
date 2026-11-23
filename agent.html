@@ -705,6 +705,7 @@
       text-decoration: underline;
       text-underline-offset: 2px;
     }
+    .md-table-scroll { overflow-x: auto; }
     .md-body table {
       width: 100%;
       border-collapse: collapse;
@@ -3469,7 +3470,33 @@
         if (inOl) { out.push('</ol>'); inOl = false; }
       };
 
-      for (const line of lines) {
+      function tableCells(line) {
+        if (!line || !line.includes('|')) return null;
+        const cells = line.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '')
+          .split(/(?<!\\)\|/).map(cell => cell.trim().replace(/\\\|/g, '|'));
+        return cells.length ? cells : null;
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const headers = tableCells(line);
+        const markers = headers && tableCells(lines[i + 1]);
+        if (markers && markers.length === headers.length && markers.every(cell => /^:?-{3,}:?$/.test(cell))) {
+          closeLists();
+          const alignments = markers.map(cell => cell.endsWith(':') ? (cell.startsWith(':') ? 'center' : 'right') : 'left');
+          const row = (cells, tag) => '<tr>' + alignments.map((align, col) =>
+            '<' + tag + ' style="text-align:' + align + '">' + (cells[col] ?? '') + '</' + tag + '>'
+          ).join('') + '</tr>';
+          out.push('<div class="md-table-scroll"><table><thead>' + row(headers, 'th') + '</thead><tbody>');
+          i++;
+          let cells;
+          while ((cells = tableCells(lines[i + 1]))) {
+            out.push(row(cells, 'td'));
+            i++;
+          }
+          out.push('</tbody></table></div>');
+          continue;
+        }
         if (/^@@CODEBLOCK_\d+@@$/.test(line.trim())) {
           closeLists();
           out.push(line.trim());
