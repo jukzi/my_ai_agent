@@ -1377,6 +1377,11 @@
             <span id="storageText">0 KB</span>
           </div>
 
+          <div style="margin-top:8px">
+            <button type="button" class="btn btn-sm btn-outline" id="exportChat">Export</button>
+            <button type="button" class="btn btn-sm btn-outline" id="importChat">Import</button>
+            <input type="file" id="chatBackupFile" accept=".json,application/json" hidden />
+          </div>
           <div style="margin-top:8px"><span>Letzte API-Nutzlast: <strong id="lastPayload">–</strong> <button type="button" class="btn btn-sm btn-outline" id="summarizeChat">Zusammenfassen</button></span></div>
         </div>
       </aside>
@@ -1404,7 +1409,7 @@
             </div>
           </div>
           <div class="composer-hint">
-            <span id="agentStatusText">Bereit</span>
+            <span id="agentStatusText" role="status" aria-live="polite">Bereit</span>
             <span>Enter = Senden · Shift+Enter = Neue Zeile · Drag &amp; Drop unterstützt</span>
           </div>
         </div>
@@ -3666,7 +3671,7 @@
       try {
         for (let step = 1; step <= maxSteps; step++) {
           if (controller.signal.aborted) break;
-          status(`Schritt ${step}/${maxSteps} — Anfrage an ${state.config.model}…`);
+          status(`Schritt ${step}/${maxSteps} · Warte auf ${state.config.model}…`);
 
           const tools = getActiveToolDefinitions();
           let data;
@@ -3721,7 +3726,9 @@
           // Execute each tool call
           for (const tc of assistantEntry.tool_calls) {
             if (controller.signal.aborted) break;
-            status(`Führt Tool aus: ${tc.name}…`);
+            const path = typeof tc.args?.path === 'string' ? ' „' + tc.args.path.slice(0, 100) + '“' : '';
+            const labels = {Read:'Lese Datei', Write:'Schreibe Datei', Edit:'Bearbeite Datei', MultiEdit:'Bearbeite Datei', Delete:'Lösche Datei', Grep:'Durchsuche Workspace', Glob:'Suche Dateien', LS:'Liste Dateien', RunPython:'Starte Python-Code', RunJavaScript:'Führe JavaScript aus', WebFetch:'Lade Webseite', JinaReader:'Lade Webseiteninhalt'};
+            status('Schritt ' + step + '/' + maxSteps + ' · ' + (Object.hasOwn(labels, tc.name) ? labels[tc.name] + path : 'Führe ' + tc.name + ' aus') + '…');
             const t0 = performance.now();
             try {
               const execute = () => executeTool(tc.name, tc.args);
@@ -4421,7 +4428,64 @@
     /* =========================================================================
        15. EVENT BINDINGS & INIT
        ========================================================================= */
+    function parseChatBackup(text) {
+      const data = JSON.parse(text);
+      const chat = data?.chat;
+      if (data?.format !== 'MyAiAgent-chat' || data.version !== 1 ||
+          typeof chat?.title !== 'string' || !chat.title.trim() || !Array.isArray(chat.messages) ||
+          !chat.workspace || typeof chat.workspace !== 'object' || Array.isArray(chat.workspace)) {
+        throw new Error('Keine unterstützte MyAiAgent-Sicherung.');
+      }
+      const workspace = Object.create(null);
+      for (const [path, file] of Object.entries(chat.workspace)) {
+        if (!path || path !== normalizePath(path) || ['__proto__', 'constructor', 'prototype'].includes(path) ||
+            typeof file?.content !== 'string' || typeof file.mime !== 'string' || typeof file.isBinary !== 'boolean') {
+          throw new Error('Ungültige Workspace-Datei in der Sicherung.');
+        }
+        workspace[path] = {content:file.content, mime:file.mime, isBinary:file.isBinary, updatedAt:Number(file.updatedAt) || Date.now()};
+      }
+      for (const message of chat.messages) {
+        if (!message || !['user', 'assistant'].includes(message.role) || typeof message.content !== 'string' ||
+            (message.tool_calls != null && (!Array.isArray(message.tool_calls) || message.tool_calls.some(call => !call || typeof call.name !== 'string')))) {
+          throw new Error('Ungültiger Chatverlauf in der Sicherung.');
+        }
+        for (const call of message.tool_calls || []) {
+          if (call.status === 'running') {
+            call.status = 'error';
+            call.error = call.result = 'Ausführung wurde nicht mit importiert.';
+          }
+        }
+      }
+      return {id:uid('chat'), title:chat.title, messages:chat.messages, workspace};
+    }
+
     function bindEvents() {
+      const backupInput = $('#chatBackupFile');
+      $('#exportChat').addEventListener('click', () => {
+        const {title, messages, workspace} = activeChat;
+        const blob = new Blob([JSON.stringify({format:'MyAiAgent-chat', version:1, chat:{title, messages, workspace}})], {type:'application/json'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'myaiagent-chat.json';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+      });
+      $('#importChat').addEventListener('click', () => backupInput.click());
+      backupInput.addEventListener('change', async () => {
+        const file = backupInput.files[0];
+        backupInput.value = '';
+        if (!file || !confirm('Nur Sicherungen aus vertrauenswürdiger Quelle importieren. Als neuen Chat hinzufügen?')) return;
+        try {
+          const chat = parseChatBackup(await file.text());
+          if (state.isRunning) throw new Error('Bitte warte auf das Ende der aktuellen Aktion.');
+          chats.push(chat);
+          switchChat(chat);
+          toast('Chat samt Workspace importiert.', 'success');
+        } catch (error) {
+          toast('Import fehlgeschlagen: ' + error.message, 'error');
+        }
+      });
       // Sidebar toggle & tabs
       $('#btnToggleSidebar').addEventListener('click', () => $('#sidebar').classList.toggle('collapsed'));
       $$('.sidebar-tab').forEach((btn) => {
