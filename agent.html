@@ -1286,6 +1286,7 @@
     #chatInput { min-height:calc(4.5em + 6px); max-height:calc(4.5em + 6px); overflow-y:auto; }
     .chat-panel:not(.empty-chat).compact-composer #chatInput { min-height:calc(1.5em + 6px); max-height:calc(1.5em + 6px); }
     .chat-messages > :is(.msg-row, .agent-steps) { flex-shrink: 0; }
+  .chat-picker-status { display:inline-flex; align-items:center; gap:5px; }
   </style>
 </head>
 <body>
@@ -1315,7 +1316,7 @@
         <div class="toolbar-search"><input type="search" id="globalSearch" aria-label="Chat und Workspace durchsuchen" placeholder="Suchen…"><div id="searchResults" class="search-results" aria-live="polite"></div></div>
         <button class="btn btn-outline btn-sm" id="btnNewChat" title="Neuen Chat starten (Workspace & Gedächtnis bleiben erhalten)">Neuer Chat</button>
         <button type="button" class="btn btn-sm" id="btnForkChat">Chat kopieren</button>
-        <select id="chatPicker" aria-label="Chat auswählen"></select>
+        <span class="chat-picker-status"><span id="chatStatusDot" class="status-dot busy" title="Chat läuft" aria-hidden="true" hidden></span><select id="chatPicker" aria-label="Chat auswählen"></select></span>
         <button type="button" class="btn btn-sm" id="renameChat">Umbenennen</button>
         <button class="btn btn-icon" id="btnTheme" title="Hell/Dunkel umschalten" aria-label="Theme umschalten">☀</button>
         <button class="btn btn-outline btn-sm" id="btnSettings">Einstellungen</button>
@@ -1824,8 +1825,11 @@
     const saveChat = () => saveLarge(STORAGE_KEYS.CHAT, {chats, active:activeChat.id});
     function chatPicker() {
       const picker = $('#chatPicker');
-      picker.replaceChildren(...chats.map(c => new Option(c.title + (runs.has(c) ? ' · läuft' : ''), c.id)));
+      picker.replaceChildren(...chats.map(c => new Option((runs.has(c) ? '● ' : '') + c.title, c.id)));
       picker.value = activeChat.id;
+      const running = runs.has(activeChat);
+      $('#chatStatusDot').hidden = !running;
+      picker.setAttribute('aria-label', running ? 'Chat auswählen – aktueller Chat läuft' : 'Chat auswählen');
     }
     function switchChat(chat) {
       if (!chat || state.isRunning) { chatPicker(); return false; }
