@@ -1261,6 +1261,7 @@
       </div>
 
       <div class="topbar-right">
+        <button class="btn btn-outline btn-sm" id="btnPRPreview" title="HTML-Stand eines Pull Requests ansehen">PR-Vorschau</button>
         <button class="btn btn-outline btn-sm" id="btnNewChat" title="Neuen Chat starten (Workspace & Gedächtnis bleiben erhalten)">Neuer Chat</button>
         <button class="btn btn-icon" id="btnTheme" title="Hell/Dunkel umschalten" aria-label="Theme umschalten">☀</button>
         <button class="btn btn-outline btn-sm" id="btnSettings">Einstellungen</button>
@@ -4009,6 +4010,38 @@
           renderTopbar();
           toast(`${badge.textContent} ${state.config.optionalTools[key] ? 'aktiviert' : 'deaktiviert'}.`, 'info');
         });
+      });
+
+      $('#btnPRPreview').addEventListener('click', async () => {
+        const repo = state.config.githubRepo.trim();
+        if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+          toast('Bitte ein GitHub-Repository in den Einstellungen hinterlegen.', 'warn');
+          return;
+        }
+        const number = prompt('Pull-Request-Nummer im Repository ' + repo + ':')?.trim();
+        if (!number) return;
+        if (!/^[1-9]\d*$/.test(number)) { toast('Ungültige PR-Nummer.', 'warn'); return; }
+        const button = $('#btnPRPreview');
+        button.disabled = true;
+        try {
+          const pr = await GitHub.request('/repos/' + repo + '/pulls/' + number);
+          const source = pr.head?.repo?.full_name;
+          const sha = pr.head?.sha;
+          if (!/^[\w.-]+\/[\w.-]+$/.test(source || '') || !/^[a-f0-9]{40}$/i.test(sha || '')) {
+            throw new Error('Der Quellstand des PR ist nicht verfügbar.');
+          }
+          const file = await GitHub.readFile(source, 'agent.html', sha);
+          if (typeof file.content !== 'string') throw new Error('agent.html konnte nicht gelesen werden.');
+          const path = 'pr-previews/' + repo + '/' + number + '/' + sha + '/agent.html';
+          if (!VFS.exists(path)) VFS.write(path, file.content);
+          openPreview(path);
+          state.previewMode = 'preview';
+          renderPreview(path);
+        } catch (err) {
+          toast('PR-Vorschau fehlgeschlagen: ' + err.message, 'error');
+        } finally {
+          button.disabled = false;
+        }
       });
 
       // Topbar buttons
