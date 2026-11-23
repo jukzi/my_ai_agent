@@ -3866,6 +3866,7 @@
       const container = $('#chatMessages');
       const oldTop = container.scrollTop;
       const atBottom = container.scrollHeight - container.clientHeight - oldTop <= 24;
+      $('#chatPanel').classList.toggle('empty-chat', !state.chat.length);
       if (!state.chat.length) {
         container.replaceChildren();
         return;
