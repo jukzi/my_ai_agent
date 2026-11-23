@@ -191,6 +191,8 @@
       white-space: nowrap;
       transition: background 0.15s, border-color 0.15s;
     }
+    .model-pill { max-width: none; min-width: 0; }
+    #modelLabel { overflow:hidden; text-overflow:ellipsis; order:-1; }
     .model-pill:hover {
       background: var(--bg-hover);
       border-color: var(--border-strong);
@@ -1273,7 +1275,7 @@
         </div>
         <button class="model-pill" id="btnModelPill" title="API & Modell konfigurieren">
           <span class="status-dot" id="statusDot"></span>
-          <span id="modelLabel">mistralai/mistral-nemo</span>
+          <span id="sessionUsage" title="Gemeldeter Verbrauch in dieser Tab-Sitzung" style="flex-shrink:0"></span><span id="modelLabel">mistralai/mistral-nemo</span>
         </button>
       </div>
 
@@ -1412,6 +1414,11 @@
             <button type="button" class="btn btn-outline" id="btnCheckApiToken">API-Token prüfen</button>
             <span id="apiTokenStatus" class="field-hint" role="status"></span>
           </div>
+          <div class="field-row">
+            <label class="field">Input €/Mio. Tokens <input id="cfgInputRate" type="number" min="0" step="any" placeholder="Unbekannt"></label>
+            <label class="field">Output €/Mio. Tokens <input id="cfgOutputRate" type="number" min="0" step="any" placeholder="Unbekannt"></label>
+          </div>
+          <div class="field-hint">Optionale Schätzpreise für die aktuell eingetragene API-URL und das Modell. Leer = unbekannt.</div>
           <div class="field-row">
             <div class="field">
               <label for="cfgMaxSteps">Max. Agent-Schritte</label>
@@ -3383,6 +3390,27 @@
       return msgs;
     }
 
+    const usageKey = 'browsercode_session_usage_v1';
+    let usageTotal = {tokens:0, euros:0, unknown:0, missing:0};
+    try { usageTotal = JSON.parse(sessionStorage.getItem(usageKey)) || usageTotal; } catch {}
+    function renderUsage() {
+      const u = usageTotal;
+      const cost = u.unknown ? (u.euros ? 'ab ' : '') : '≈ ';
+      $('#sessionUsage').textContent = u.tokens.toLocaleString('de-DE') + (u.missing ? '+ tok' : ' tok') +
+        (u.unknown && !u.euros ? ' · € ?' : ' · ' + cost + u.euros.toLocaleString('de-DE',{maximumFractionDigits:6}) + ' €');
+    }
+    function recordUsage(data, config) {
+      const u = data?.usage;
+      if (Number.isFinite(u?.total_tokens)) usageTotal.tokens += u.total_tokens;
+      else if (Number.isFinite(u?.prompt_tokens) && Number.isFinite(u?.completion_tokens)) usageTotal.tokens += u.prompt_tokens + u.completion_tokens;
+      else usageTotal.missing++;
+      const input = config.inputRate, output = config.outputRate;
+      if (input != null && output != null && Number.isFinite(u?.prompt_tokens) && Number.isFinite(u?.completion_tokens)) {
+        usageTotal.euros += (input * u.prompt_tokens + output * u.completion_tokens) / 1e6;
+      } else usageTotal.unknown++;
+      try { sessionStorage.setItem(usageKey, JSON.stringify(usageTotal)); } catch {}
+      renderUsage();
+    }
     async function callChatApi(messages, tools, signal) {
       const baseUrl = (state.config.baseUrl || DEFAULT_CONFIG.baseUrl).replace(/\/+$/, '');
       const url = `${baseUrl}/chat/completions`;
@@ -3393,6 +3421,7 @@
         headers['Authorization'] = `Bearer ${state.config.apiKey.trim()}`;
       }
 
+      const rates = state.config.tokenRates?.[JSON.stringify([baseUrl, state.config.model || DEFAULT_CONFIG.model])] || {};
       const payload = {
         model: state.config.model || DEFAULT_CONFIG.model,
         messages,
@@ -3411,6 +3440,7 @@
       const text = await res.text();
       let data;
       try { data = JSON.parse(text); } catch { data = null; }
+      if (res.ok) recordUsage(data, rates);
       if (!res.ok) {
         const errMsg = data?.error?.message || data?.message || text || `HTTP ${res.status}`;
         const err = new Error(errMsg);
@@ -3641,6 +3671,7 @@
     }
 
     function renderTopbar() {
+      renderUsage();
       $('#modelLabel').textContent = state.config.model || DEFAULT_CONFIG.model;
       const dot = $('#statusDot');
       if (!state.isRunning) {
@@ -4074,10 +4105,18 @@
     /* =========================================================================
        14. SETTINGS MODAL & BACKUP
        ========================================================================= */
+    function loadRateFields() {
+      const base = ($('#cfgBaseUrl').value.trim() || DEFAULT_CONFIG.baseUrl).replace(/\/+$/, '');
+      const model = $('#cfgModel').value.trim() || DEFAULT_CONFIG.model;
+      const rates = state.config.tokenRates?.[JSON.stringify([base, model])];
+      $('#cfgInputRate').value = rates?.inputRate ?? '';
+      $('#cfgOutputRate').value = rates?.outputRate ?? '';
+    }
     function openSettings() {
       $('#cfgBaseUrl').value = state.config.baseUrl;
       $('#cfgApiKey').value = state.config.apiKey;
       $('#cfgModel').value = state.config.model;
+      loadRateFields();
       $('#cfgMaxSteps').value = state.config.maxSteps;
       $('#cfgTemp').value = state.config.temperature;
       $('#cfgSystemPrompt').value = state.config.systemPrompt || '';
@@ -4095,6 +4134,10 @@
       state.config.baseUrl = $('#cfgBaseUrl').value.trim() || DEFAULT_CONFIG.baseUrl;
       state.config.apiKey = $('#cfgApiKey').value.trim();
       state.config.model = $('#cfgModel').value.trim() || DEFAULT_CONFIG.model;
+      const rate = id => { const n = $(id).valueAsNumber; return Number.isFinite(n) && n >= 0 ? n : null; };
+      (state.config.tokenRates ||= {})[JSON.stringify([state.config.baseUrl.replace(/\/+$/, ''), state.config.model])] = {
+        inputRate: rate('#cfgInputRate'), outputRate: rate('#cfgOutputRate'),
+      };
       state.config.maxSteps = Math.max(1, Math.min(50, parseInt($('#cfgMaxSteps').value, 10) || 20));
       state.config.temperature = Math.max(0, Math.min(2, parseFloat($('#cfgTemp').value) || 0.2));
       state.config.systemPrompt = $('#cfgSystemPrompt').value.trim();
@@ -4203,6 +4246,8 @@
         saveConfig();
         applyTheme();
       });
+      $('#cfgModel').addEventListener('input', loadRateFields);
+      $('#cfgBaseUrl').addEventListener('input', loadRateFields);
       $('#btnSettings').addEventListener('click', openSettings);
       $('#btnModelPill').addEventListener('click', openSettings);
       $('#btnNewChat').addEventListener('click', () => {
