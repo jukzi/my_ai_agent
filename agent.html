@@ -1418,7 +1418,7 @@
             <label class="field">Input USD/Mio. Tokens <input id="cfgInputRate" type="number" min="0" step="any" placeholder="Unbekannt"></label>
             <label class="field">Output USD/Mio. Tokens <input id="cfgOutputRate" type="number" min="0" step="any" placeholder="Unbekannt"></label>
           </div>
-          <div class="field-hint">Optionale Schätzpreise für die aktuell eingetragene API-URL und das Modell. Leer = unbekannt.</div>
+          <div class="field-hint">Optionale Schätzpreise für die aktuell eingetragene API-URL und das Modell. Leer = bei OpenRouter automatisch aus der Modellliste, sonst unbekannt.</div>
           <div class="field-row">
             <div class="field">
               <label for="cfgMaxSteps">Max. Agent-Schritte</label>
@@ -3399,6 +3399,21 @@
       $('#sessionUsage').textContent = u.tokens.toLocaleString('de-DE') + (u.missing ? '+ tok' : ' tok') +
         (u.unknown && !u.dollars ? ' · USD ?' : ' · ' + cost + u.dollars.toLocaleString('de-DE',{maximumFractionDigits:6}) + ' USD');
     }
+    let openRouterCatalog;
+    let catalogTime = 0;
+    async function openRouterRates(model) {
+      if (!openRouterCatalog || Date.now() - catalogTime > 3600000) {
+        catalogTime = Date.now();
+        openRouterCatalog = fetch('https://openrouter.ai/api/v1/models', {
+          credentials: 'omit', signal: AbortSignal.timeout(4000),
+        }).then(r => { if (!r.ok) throw Error(r.status); return r.json(); })
+          .then(data => Array.isArray(data.data) ? data.data : []).catch(() => []);
+      }
+      const pricing = (await openRouterCatalog).find(m => m.id === model)?.pricing;
+      const rate = value => value != null && String(value).trim() && Number.isFinite(Number(value)) && Number(value) >= 0
+        ? Number(value) * 1e6 : null;
+      return {inputRate:rate(pricing?.prompt), outputRate:rate(pricing?.completion)};
+    }
     function recordUsage(data, config) {
       const u = data?.usage;
       if (Number.isFinite(u?.total_tokens)) usageTotal.tokens += u.total_tokens;
@@ -3441,7 +3456,12 @@
       const text = await res.text();
       let data;
       try { data = JSON.parse(text); } catch { data = null; }
-      if (res.ok) recordUsage(data, { ...rates, openRouter: new URL(url, location.href).origin === 'https://openrouter.ai' });
+      if (res.ok) {
+        const openRouter = new URL(url, location.href).origin === 'https://openrouter.ai';
+        const automatic = openRouter && !Number.isFinite(data?.usage?.cost) && (rates.inputRate == null || rates.outputRate == null)
+          ? await openRouterRates(data?.model || payload.model) : {};
+        recordUsage(data, { openRouter, inputRate: rates.inputRate ?? automatic.inputRate, outputRate: rates.outputRate ?? automatic.outputRate });
+      }
       if (!res.ok) {
         const errMsg = data?.error?.message || data?.message || text || `HTTP ${res.status}`;
         const err = new Error(errMsg);
