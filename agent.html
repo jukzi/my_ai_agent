@@ -3593,6 +3593,19 @@
       `).join('');
     }
 
+    function formatToolText(value, indent = '') {
+      if (typeof value === 'string') return value;
+      if (value === null || typeof value !== 'object') return String(value);
+      const entries = Object.entries(value);
+      if (!entries.length) return Array.isArray(value) ? '[]' : '{}';
+      return entries.map(([key, item]) => {
+        if (item !== null && typeof item === 'object' && Object.keys(item).length) {
+          return indent + key + ':\n' + formatToolText(item, indent + '  ');
+        }
+        return indent + key + ': ' + formatToolText(item).replace(/\n/g, '\n' + indent + '  ');
+      }).join('\n');
+    }
+
     function renderChat() {
       const container = $('#chatMessages');
       if (!state.chat.length) {
@@ -3620,6 +3633,7 @@
         return;
       }
 
+      const toolText = [];
       container.innerHTML = state.chat.map((m) => {
         const time = new Date(m.timestamp || Date.now()).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
         if (m.role === 'user') {
@@ -3646,6 +3660,12 @@
           const toolsHtml = (m.tool_calls || []).length ? `
             <div class="tool-calls-wrap">
               ${m.tool_calls.map((tc) => {
+                const argsIndex = toolText.push(formatToolText(tc.args ?? {})) - 1;
+                let result = tc.result ?? '(wartet…)';
+                if (tc.status === 'ok' && tc.name.startsWith('GitHub_')) {
+                  try { result = JSON.parse(result); } catch { /* Keep plain text unchanged. */ }
+                }
+                const resultIndex = toolText.push(formatToolText(result)) - 1;
                 const summary = tc.args?.file_path || tc.args?.command || tc.args?.pattern || tc.args?.key || tc.args?.path || tc.args?.title || '';
                 const statusLabel = tc.status === 'running' ? 'läuft…' : tc.status === 'error' ? 'fehler' : `${tc.durationMs || 0}ms`;
                 // Show inline image if tool wrote/read an image
@@ -3667,9 +3687,9 @@
                     </div>
                     <div class="tool-card-body">
                       <div class="tool-section-label">Argumente</div>
-                      <div class="tool-pre">${escapeHtml(JSON.stringify(tc.args, null, 2))}</div>
+                      <div class="tool-pre" data-tool-text="${argsIndex}"></div>
                       <div class="tool-section-label">Ergebnis</div>
-                      <div class="tool-pre">${escapeHtml(tc.result ?? '(wartet…)')}</div>
+                      <div class="tool-pre" data-tool-text="${resultIndex}"></div>
                       ${inline ? "" : imgPreview}
                     </div>
                     ${inline ? imgPreview : ""}
@@ -3691,6 +3711,9 @@
         }
       }).join('');
 
+      for (const el of container.querySelectorAll('.tool-card-body > [data-tool-text]')) {
+        el.textContent = toolText[Number(el.dataset.toolText)] ?? '';
+      }
       container.scrollTop = container.scrollHeight;
     }
 
