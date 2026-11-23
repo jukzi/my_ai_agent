@@ -1274,6 +1274,11 @@
     }
     .agent-steps { width:100%; max-width:860px; margin:0 auto; }
     .agent-steps summary { cursor:pointer; padding-left:16px; color:var(--text-secondary); font-size:12px; }
+    .empty-chat { justify-content:center; }
+    .empty-chat .chat-messages { flex:0; padding:0; }
+    .empty-chat .composer-wrap { border-top:0; }
+    .empty-chat .composer-box { max-width:720px; border-color:var(--accent); }
+    .composer-input { max-height:calc(4.5em + 6px); }
   </style>
 </head>
 <body>
@@ -1404,6 +1409,13 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="keySetup">
+    <form class="modal" id="keySetupForm" aria-labelledby="keySetupTitle" role="dialog" aria-modal="true">
+      <div class="modal-head"><h2 id="keySetupTitle">API-Key eingeben</h2></div>
+      <div class="modal-body"><div class="field"><label for="initialKey">API-Key</label><input type="password" id="initialKey" autocomplete="off" required></div><p class="field-hint" id="keySetupStatus" role="status"></p></div>
+      <div class="modal-foot"><button type="button" class="btn" id="keySetupManual">Manuell einrichten</button><button class="btn btn-primary" id="keySetupSubmit">Verbinden</button></div>
+    </form>
+  </div>
   <!-- Settings Modal -->
   <div class="modal-backdrop" id="settingsModal">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
@@ -3841,28 +3853,9 @@
       const container = $('#chatMessages');
       const oldTop = container.scrollTop;
       const atBottom = container.scrollHeight - container.clientHeight - oldTop <= 24;
+      $('#chatPanel').classList.toggle('empty-chat', !state.chat.length);
       if (!state.chat.length) {
-        container.innerHTML = `
-          <div class="welcome-card">
-            <h1>BrowserCode Agent</h1>
-            <p>Agentic Coding Loop mit dauerhaftem Gedächtnis, Claude-Code-Tools (<code>Read</code>, <code>Write</code>, <code>Edit</code>, <code>Glob</code>, <code>Grep</code>, <code>Bash</code>, <code>TodoWrite</code>) und lokalem Workspace im Browser.</p>
-            ${!state.config.apiKey ? '<p style="color:var(--warn); font-size:12.5px;">Hinweis: Bitte hinterlege zuerst deinen OpenRouter / OpenAI API Key in den <b>Einstellungen</b>.</p>' : ''}
-            <div class="quick-prompts">
-              <button class="quick-prompt" data-prompt="Erstelle eine interaktive HTML/JS-Visualisierung als index_demo.html im Workspace und erkläre mir den Code.">
-                <strong>Web-Demo erstellen</strong>
-                Erstellt eine neue Datei im Workspace
-              </button>
-              <button class="quick-prompt" data-prompt="Erstelle ein modernes SVG-Diagramm (architektur.svg) im Workspace, das einen Agentic Loop zeigt.">
-                <strong>SVG-Grafik generieren</strong>
-                Direkt in der Bildvorschau ansehen
-              </button>
-              <button class="quick-prompt" data-prompt="Liste alle Dateien im Workspace auf, lies die README.md und merke dir im Gedächtnis, dass ich auf Deutsch antworte.">
-                <strong>Workspace &amp; Gedächtnis testen</strong>
-                Nutzt LS, Read &amp; MemoryWrite
-              </button>
-            </div>
-          </div>
-        `;
+        container.replaceChildren();
         return;
       }
 
@@ -4633,7 +4626,7 @@
             e.preventDefault();
             chatInput.value = prompts[historyIndex] ?? '';
             chatInput.style.height = 'auto';
-            chatInput.style.height = Math.min(180, chatInput.scrollHeight) + 'px';
+            chatInput.style.height = Math.min(parseFloat(getComputedStyle(chatInput).maxHeight), chatInput.scrollHeight) + 'px';
             chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
             if (historyIndex < 0) prompts = [];
             return;
@@ -4647,7 +4640,7 @@
       chatInput.addEventListener('input', () => {
         historyIndex = -1;
         chatInput.style.height = 'auto';
-        chatInput.style.height = Math.min(180, chatInput.scrollHeight) + 'px';
+        chatInput.style.height = Math.min(parseFloat(getComputedStyle(chatInput).maxHeight), chatInput.scrollHeight) + 'px';
       });
       chatInput.addEventListener('paste', (e) => {
         const files = Array.from(e.clipboardData?.files || []);
@@ -4757,6 +4750,54 @@
       });
     }
 
+    function bindKeySetup() {
+      if (state.config.apiKey?.trim()) return;
+      const modal = $('#keySetup'), input = $('#initialKey'), submit = $('#keySetupSubmit');
+      const manual = message => {
+        const key = input.value.trim();
+        input.value = '';
+        modal.classList.remove('open');
+        openSettings();
+        $('#cfgApiKey').value = key;
+        if (message) toast(message, 'warn');
+        $('#cfgBaseUrl').focus();
+      };
+      // Only use distinctive prefixes and fixed HTTPS endpoints. Never probe several providers with one key.
+      const providers = [
+        ['sk-or-v1-', 'https://openrouter.ai/api/v1'],
+        ['sk-proj-', 'https://api.openai.com/v1'],
+        ['sk-svcacct-', 'https://api.openai.com/v1'],
+        ['gsk_', 'https://api.groq.com/openai/v1'],
+        ['AIza', 'https://generativelanguage.googleapis.com/v1beta/openai'],
+        ['pplx-', 'https://api.perplexity.ai'],
+        ['xai-', 'https://api.x.ai/v1'],
+      ];
+      $('#keySetupManual').onclick = () => manual();
+      $('#keySetupForm').addEventListener('submit', async event => {
+        event.preventDefault();
+        const key = input.value.trim();
+        const baseUrl = providers.find(([prefix]) => key.startsWith(prefix))?.[1];
+        if (!baseUrl) return manual('Anbieter nicht eindeutig erkennbar. Bitte API-URL und Modell eintragen.');
+        submit.disabled = input.readOnly = $('#keySetupManual').disabled = true;
+        $('#keySetupStatus').textContent = 'Lädt verfügbare Chat-Modelle…';
+        try {
+          const headers = {Authorization:'Bearer ' + key};
+          const options = () => ({credentials:'omit', redirect:'error', signal:AbortSignal.timeout(10000)});
+          const res = await fetch(baseUrl + '/models', {...options(), headers});
+          if (!res.ok) throw Error();
+          const data = await res.json();
+          const models = data.data.filter(m => typeof m.id === 'string' && !/embed|whisper|tts|rerank|moderation|image-generation|transcri|realtime/i.test(m.id) && (!m.architecture?.output_modalities || m.architecture.output_modalities.includes('text')));
+          const model = (models.find(m => m.id.endsWith(':free')) || models.find(m => /mini|flash|haiku|small/i.test(m.id)) || models[0])?.id;
+          if (!model) throw Error();
+          const check = await fetch(baseUrl + '/chat/completions', {...options(), method:'POST', headers:{...headers,'Content-Type':'application/json'}, body:JSON.stringify({model,messages:[{role:'user',content:'OK'}],max_tokens:8})});
+          if (!check.ok || !(await check.json())?.choices?.[0]?.message) throw Error();
+          Object.assign(state.config, {baseUrl, apiKey:key, model});
+          saveConfig(); renderTopbar();
+          input.value = ''; modal.classList.remove('open'); $('#chatInput').focus();
+        } catch { manual('Automatische Einrichtung fehlgeschlagen. Bitte API-URL und Modell prüfen.'); $('#cfgBaseUrl').value = baseUrl; }
+      });
+      modal.classList.add('open'); input.focus();
+    }
     async function init() {
       loadState();
       try { await loadLargeData(); } catch (err) {
@@ -4773,6 +4814,7 @@
       updateStorageMeter();
       chatPicker();
       bindEvents();
+      bindKeySetup();
     }
 
     init();
