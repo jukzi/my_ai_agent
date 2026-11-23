@@ -3021,6 +3021,7 @@
       }});
 
       tools.push({type:'function',function:{name:'ShowHTML',description:'Zeigt eine interaktive HTML-Datei aus dem Workspace direkt im Chat. Nach dem Erstellen einer interaktiven Visualisierung verwenden.',parameters:{type:'object',properties:{file_path:{type:'string'}},required:['file_path']}}});
+      tools.push({type:'function',function:{name:'ShowTable',description:'Zeigt eine Tabelle direkt im Chat.',parameters:{type:'object',properties:{headers:{type:'array',items:{type:'string'}},rows:{type:'array',items:{type:'array',items:{type:'string'}}}},required:['headers','rows']}}});
       // Optional Tools
       if (state.config.optionalTools.python) {
         tools.push({
@@ -3300,6 +3301,9 @@
           }
           return 'Bild im Chat angezeigt: ' + path;
         }
+        case 'ShowTable':
+          if (!tablePreview(args)) throw new Error('Ungültige Tabelle: erwartet bis zu 20 Spalten und 200 gleich breite Zeilen aus Textzellen.');
+          return 'Tabelle angezeigt';
         case 'ShowHTML': {
           const path = normalizePath(args.file_path);
           const file = VFS.get(path);
@@ -3837,6 +3841,11 @@
     let initialChatScroll = null;
     try { initialChatScroll = sessionStorage.getItem(chatScrollKey); } catch {}
 
+    function tablePreview(t) {
+      if (!Array.isArray(t?.headers) || !t.headers.length || t.headers.length > 20 || !t.headers.every(v=>typeof v==='string') || !Array.isArray(t.rows) || t.rows.length>200 || !t.rows.every(r=>Array.isArray(r)&&r.length===t.headers.length&&r.every(v=>typeof v==='string'))) return '';
+      const row=(cells,tag)=>'<tr>'+cells.map(v=>'<'+tag+'>'+escapeHtml(v)+'</'+tag+'>').join('')+'</tr>';
+      return '<div class="md-body md-table-scroll"><table><thead>'+row(t.headers,'th')+'</thead><tbody>'+t.rows.map(r=>row(r,'td')).join('')+'</tbody></table></div>';
+    }
     function renderChat() {
       const container = $('#chatMessages');
       const oldTop = container.scrollTop;
@@ -3867,7 +3876,8 @@
       }
 
       const toolText = [];
-      const rows = state.chat.map((m) => {
+      const displays = state.chat.map(() => []);
+      const rows = state.chat.map((m, index) => {
         const time = new Date(m.timestamp || Date.now()).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
         if (m.role === 'user') {
           const attsHtml = (m.attachments || []).length ? `
@@ -3913,6 +3923,11 @@
                   const url = getImageDataUrl(targetPath, VFS.get(targetPath));
                   if (url) imgPreview = `<img src="${escapeHtml(url)}" data-lightbox="${escapeHtml(url)}" style="max-width:100%; max-height:180px; margin-top:6px; border-radius:6px; cursor:zoom-in;" alt="${escapeHtml(targetPath)}" />`;
                 }
+                if (tc.status === 'ok') {
+                  if (tc.name === 'ShowHTML') displays[index].push(htmlPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button><button type="button" class="btn btn-sm btn-icon" data-preview-download="${escapeHtml(targetPath)}" title="Herunterladen" aria-label="Herunterladen">↓</button>${htmlPreview}</div>` : "");
+                  if (tc.name === 'ShowImage') displays[index].push(inline && imgPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button><button type="button" class="btn btn-sm btn-icon" data-preview-download="${escapeHtml(targetPath)}" title="Herunterladen" aria-label="Herunterladen">↓</button>${imgPreview}</div>` : "");
+                  if (tc.name === 'ShowTable') displays[index].push(tablePreview(tc.args));
+                }
                 return `
                   <div class="tool-card ${tc.status === 'error' ? 'open' : ''}">
                     <div class="tool-card-head" data-toggle-tool>
@@ -3922,7 +3937,7 @@
                       </div>
                       <span class="tool-status ${tc.status}">${statusLabel}</span>
                     </div>
-                    ${htmlPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button><button type="button" class="btn btn-sm btn-icon" data-preview-download="${escapeHtml(targetPath)}" title="Herunterladen" aria-label="Herunterladen">↓</button>${htmlPreview}</div>` : ""}
+
                     <div class="tool-card-body">
                       <div class="tool-section-label">Argumente</div>
                       <div class="tool-pre" data-tool-text="${argsIndex}"></div>
@@ -3930,7 +3945,7 @@
                       <div class="tool-pre" data-tool-text="${resultIndex}"></div>
                       ${inline ? "" : imgPreview}
                     </div>
-                    ${inline && imgPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button><button type="button" class="btn btn-sm btn-icon" data-preview-download="${escapeHtml(targetPath)}" title="Herunterladen" aria-label="Herunterladen">↓</button>${imgPreview}</div>` : ""}
+
                   </div>
                 `;
               }).join('')}
@@ -3955,7 +3970,9 @@
           const id = String(state.chat[i].id);
           groups.push('<details class="agent-steps" data-group="' + escapeHtml(id) + '"' + (expanded.has(id) ? ' open' : '') + '><summary>Frühere Agentenschritte (' + (j - i - 1) + ')</summary>' + rows.slice(i,j-1).join('') + '</details>');
         }
-        groups.push(rows[j-1]); i=j;
+        groups.push(rows[j-1]);
+        for (const preview of displays.slice(i,j).flat().filter(Boolean)) groups.push('<div class="msg-row assistant">'+preview+'</div>');
+        i=j;
       }
       container.innerHTML = groups.join('');
 
