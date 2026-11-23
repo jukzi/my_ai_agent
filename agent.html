@@ -2890,6 +2890,12 @@
         },
       ];
 
+      tools.push({type: 'function', function: {
+        name: 'ShowImage',
+        description: 'Zeigt eine Bilddatei aus dem Workspace direkt im Chat an.',
+        parameters: {type: 'object', properties: {file_path: {type: 'string'}}, required: ['file_path']},
+      }});
+
       // Optional Tools
       if (state.config.optionalTools.python) {
         tools.push({
@@ -3144,6 +3150,14 @@
           const text = await res.text();
           const clean = text.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
           return clean.slice(0, 12000) + (clean.length > 12000 ? '\n… [gekürzt]' : '');
+        }
+        case 'ShowImage': {
+          const path = normalizePath(args.file_path);
+          const file = VFS.get(path);
+          if (!file || !isImageFile(path, file.mime) || !getImageDataUrl(path, file)) {
+            throw new Error('Keine darstellbare Bilddatei: ' + path);
+          }
+          return 'Bild im Chat angezeigt: ' + path;
         }
         case 'MemoryWrite': {
           const key = String(args.key || '').trim();
@@ -3637,9 +3651,10 @@
                 // Show inline image if tool wrote/read an image
                 let imgPreview = '';
                 const targetPath = tc.args?.file_path;
-                if (targetPath && VFS.exists(targetPath) && isImageFile(targetPath, VFS.get(targetPath).mime)) {
+                const inline = tc.name === "ShowImage" && tc.status === "ok";
+                if ((tc.name !== "ShowImage" || inline) && targetPath && VFS.exists(targetPath) && isImageFile(targetPath, VFS.get(targetPath).mime)) {
                   const url = getImageDataUrl(targetPath, VFS.get(targetPath));
-                  if (url) imgPreview = `<img src="${url}" data-lightbox="${url}" style="max-height:180px; margin-top:6px; border-radius:6px; cursor:zoom-in;" alt="${escapeHtml(targetPath)}" />`;
+                  if (url) imgPreview = `<img src="${escapeHtml(url)}" data-lightbox="${escapeHtml(url)}" style="max-width:100%; max-height:180px; margin-top:6px; border-radius:6px; cursor:zoom-in;" alt="${escapeHtml(targetPath)}" />`;
                 }
                 return `
                   <div class="tool-card ${tc.status === 'error' ? 'open' : ''}">
@@ -3655,8 +3670,9 @@
                       <div class="tool-pre">${escapeHtml(JSON.stringify(tc.args, null, 2))}</div>
                       <div class="tool-section-label">Ergebnis</div>
                       <div class="tool-pre">${escapeHtml(tc.result ?? '(wartet…)')}</div>
-                      ${imgPreview}
+                      ${inline ? "" : imgPreview}
                     </div>
+                    ${inline ? imgPreview : ""}
                   </div>
                 `;
               }).join('')}
