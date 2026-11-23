@@ -2959,6 +2959,7 @@
         parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
       }});
 
+      tools.push({type:'function',function:{name:'ShowHTML',description:'Zeigt eine interaktive HTML-Datei aus dem Workspace direkt im Chat. Nach dem Erstellen einer interaktiven Visualisierung verwenden.',parameters:{type:'object',properties:{file_path:{type:'string'}},required:['file_path']}}});
       // Optional Tools
       if (state.config.optionalTools.python) {
         tools.push({
@@ -3237,6 +3238,12 @@
             throw new Error('Keine darstellbare Bilddatei: ' + path);
           }
           return 'Bild im Chat angezeigt: ' + path;
+        }
+        case 'ShowHTML': {
+          const path = normalizePath(args.file_path);
+          const file = VFS.get(path);
+          if (!file || file.isBinary || !['html','htm'].includes(getExt(path))) throw new Error('HTML-Datei nicht gefunden: ' + path);
+          return 'Interaktive Vorschau: ' + path;
         }
         case 'MemoryWrite': {
           const key = String(args.key || '').trim();
@@ -3782,6 +3789,10 @@
                 // Show inline image if tool wrote/read an image
                 let imgPreview = '';
                 const targetPath = tc.args?.file_path;
+                const file = tc.name === 'ShowHTML' && tc.status === 'ok' && VFS.get(targetPath);
+                const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">`;
+                const htmlPreview = file && !file.isBinary && ['html','htm'].includes(getExt(targetPath))
+                  ? `<iframe title="Interaktive HTML-Vorschau" sandbox="allow-scripts" referrerpolicy="no-referrer" style="width:100%;height:440px;border:0" srcdoc="${escapeHtml(policy + file.content)}"></iframe>` : '';
                 const inline = tc.name === "ShowImage" && tc.status === "ok";
                 if ((tc.name !== "ShowImage" || inline) && targetPath && VFS.exists(targetPath) && isImageFile(targetPath, VFS.get(targetPath).mime)) {
                   const url = getImageDataUrl(targetPath, VFS.get(targetPath));
@@ -3796,6 +3807,7 @@
                       </div>
                       <span class="tool-status ${tc.status}">${statusLabel}</span>
                     </div>
+                    ${htmlPreview}
                     <div class="tool-card-body">
                       <div class="tool-section-label">Argumente</div>
                       <div class="tool-pre" data-tool-text="${argsIndex}"></div>
