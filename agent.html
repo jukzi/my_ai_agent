@@ -2913,6 +2913,12 @@
         parameters: {type: 'object', properties: {file_path: {type: 'string'}}, required: ['file_path']},
       }});
 
+      tools.push({ type: 'function', function: {
+        name: 'JinaReader',
+        description: 'Liest öffentliche Webseiten über den externen Dienst Jina Reader, z. B. wenn WebFetch wegen CORS scheitert. Keine privaten URLs oder URLs mit geheimen Parametern senden.',
+        parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
+      }});
+
       // Optional Tools
       if (state.config.optionalTools.python) {
         tools.push({
@@ -3162,6 +3168,7 @@
           VFS.write(norm, JSON.stringify(nb, null, 2), { mime: 'application/x-ipynb+json' });
           return `Notebook ${norm} aktualisiert (${mode} Zelle ${idx}).`;
         }
+        case 'JinaReader':
         case 'WebFetch': {
           const url = new URL(args.url);
           if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
@@ -3170,16 +3177,12 @@
           url.hash = '';
           const options = () => ({ credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
           const limit = text => text.slice(0, 12000) + (text.length > 12000 ? '\n… [gekürzt]' : '');
-          let response;
-          try { response = await fetch(url.href, options()); } catch (err) {
-            if (!['TypeError', 'TimeoutError'].includes(err.name)) throw err;
-            if (!confirm('Direkter Abruf fehlgeschlagen. Die folgende URL an den externen Dienst Jina Reader senden? Nur für öffentliche Seiten verwenden.\n\n' + url.href)) {
-              throw new Error('Direkter Abruf fehlgeschlagen; externer Abruf nicht autorisiert.');
-            }
+          if (name === 'JinaReader') {
             const reader = await fetch('https://r.jina.ai/' + url.href, { ...options(), redirect: 'error' });
             if (!reader.ok) throw new Error('Jina Reader: HTTP ' + reader.status);
             return 'Quelle: Jina Reader (externer Abruf)\n' + limit(await reader.text());
           }
+          const response = await fetch(url.href, options());
           if (!response.ok) throw new Error('WebFetch: HTTP ' + response.status);
           const text = await response.text();
           const clean = /text\/html/i.test(response.headers.get('content-type') || '')
