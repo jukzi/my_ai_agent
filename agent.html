@@ -3812,7 +3812,7 @@
                       </div>
                       <span class="tool-status ${tc.status}">${statusLabel}</span>
                     </div>
-                    ${htmlPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm" data-fullscreen>Vollbild</button>${htmlPreview}</div>` : ""}
+                    ${htmlPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button>${htmlPreview}</div>` : ""}
                     <div class="tool-card-body">
                       <div class="tool-section-label">Argumente</div>
                       <div class="tool-pre" data-tool-text="${argsIndex}"></div>
@@ -3820,7 +3820,7 @@
                       <div class="tool-pre" data-tool-text="${resultIndex}"></div>
                       ${inline ? "" : imgPreview}
                     </div>
-                    ${inline && imgPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm" data-fullscreen>Vollbild</button>${imgPreview}</div>` : ""}
+                    ${inline && imgPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button>${imgPreview}</div>` : ""}
                   </div>
                 `;
               }).join('')}
@@ -3901,7 +3901,7 @@
         actions.push(`<button class="btn btn-sm btn-icon" id="btnZoomIn" title="Vergrößern">+</button>`);
       }
       actions.push(`<button class="btn btn-sm btn-icon" id="btnPreviewDownload" title="Datei herunterladen">↓</button>`);
-      if (mode === "preview" && (isImg || isHtml)) actions.push(`<button type="button" class="btn btn-sm" data-fullscreen="panel">Vollbild</button>`);
+      if (mode === "preview" && (isImg || isHtml)) actions.push(`<button type="button" class="btn btn-sm btn-icon" data-fullscreen="panel" title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button>`);
       actions.push(`<button class="btn btn-sm btn-icon" id="btnClosePreview" title="Schließen">✕</button>`);
       $('#previewActions').innerHTML = actions.join('');
 
@@ -4150,7 +4150,11 @@
       });
       document.addEventListener('fullscreenchange', () => {
         for (const button of $$('[data-fullscreen]')) {
-          button.textContent = document.fullscreenElement?.contains(button) ? 'Vollbild beenden' : 'Vollbild';
+          const active = document.fullscreenElement?.contains(button);
+          const label = active ? 'Vollbild beenden' : 'Vollbild';
+          button.title = label;
+          button.setAttribute('aria-label', label);
+          button.innerHTML = active ? "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M3 9h6V3m12 6h-6V3M9 21v-6H3m12 6v-6h6\"/></svg>" : "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6\"/></svg>";
         }
       });
       // Topbar buttons
