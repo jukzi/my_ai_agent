@@ -1323,7 +1323,7 @@
 
         <div class="sidebar-footer">
           <div class="storage-row">
-            <span>localStorage</span>
+            <span>Browserspeicher</span>
             <span id="storageText">0 KB</span>
           </div>
           <div class="storage-bar">
@@ -1714,8 +1714,42 @@
     }
 
     const saveConfig = () => saveKey(STORAGE_KEYS.CONFIG, state.config);
-    const saveWorkspace = () => saveKey(STORAGE_KEYS.WORKSPACE, state.workspace);
-    const saveChat = () => saveKey(STORAGE_KEYS.CHAT, state.chat);
+    let largeDb;
+    function largeTransaction(mode, work) {
+      return new Promise((resolve, reject) => {
+        const tx = largeDb.transaction('data', mode);
+        const result = work(tx.objectStore('data'));
+        tx.oncomplete = () => resolve(result);
+        tx.onabort = () => reject(tx.error || new Error('Transaktion abgebrochen'));
+      });
+    }
+    async function loadLargeData() {
+      largeDb = await new Promise((resolve, reject) => {
+        const req = indexedDB.open('browsercode-large-data', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('data');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      await largeTransaction('readwrite', store => {
+        for (const [field, key] of [['workspace', STORAGE_KEYS.WORKSPACE], ['chat', STORAGE_KEYS.CHAT]]) {
+          const req = store.get(key);
+          req.onsuccess = () => {
+            if (req.result !== undefined) state[field] = req.result;
+            else store.put(state[field], key);
+          };
+        }
+      });
+      localStorage.removeItem(STORAGE_KEYS.WORKSPACE);
+      localStorage.removeItem(STORAGE_KEYS.CHAT);
+    }
+    function saveLarge(key, value) {
+      if (!largeDb) return saveKey(key, value);
+      largeTransaction('readwrite', store => store.put(value, key))
+        .then(updateStorageMeter)
+        .catch(() => toast('IndexedDB: Änderungen konnten nicht gespeichert werden. Bitte ein Backup exportieren.', 'error'));
+    }
+    const saveWorkspace = () => saveLarge(STORAGE_KEYS.WORKSPACE, state.workspace);
+    const saveChat = () => saveLarge(STORAGE_KEYS.CHAT, state.chat);
     const saveMemory = () => saveKey(STORAGE_KEYS.MEMORY, state.memory);
     const saveTodos = () => saveKey(STORAGE_KEYS.TODOS, state.todos);
 
@@ -1728,6 +1762,12 @@
       const limit = 5 * 1024 * 1024; // ~5 MB conservative browser limit
       const pct = Math.min(100, (totalBytes / limit) * 100);
       $('#storageText').textContent = `${formatBytes(totalBytes)} / 5 MB`;
+      if (largeDb && navigator.storage?.estimate) navigator.storage.estimate().then(({usage, quota}) => {
+        if (quota > 0 && Number.isFinite(usage)) {
+          $('#storageText').textContent = `${formatBytes(usage)} / ${formatBytes(quota)}`;
+          $('#storageFill').style.width = `${Math.min(100, usage / quota * 100)}%`;
+        }
+      }).catch(() => {});
       const fill = $('#storageFill');
       fill.style.width = `${pct.toFixed(1)}%`;
       fill.className = 'storage-fill' + (pct > 85 ? ' danger' : pct > 65 ? ' warn' : '');
@@ -4233,8 +4273,11 @@
         }
         e.target.value = '';
       });
-      $('#btnResetAll').addEventListener('click', () => {
+      $('#btnResetAll').addEventListener('click', async () => {
         if (!confirm('Wirklich ALLES (Workspace, Chat, Gedächtnis, Konfiguration) zurücksetzen?')) return;
+        if (state.isRunning) { toast('Bitte stoppe zuerst den Agenten.', 'warn'); return; }
+        try { await largeTransaction('readwrite', store => store.clear()); }
+        catch { toast('IndexedDB konnte nicht geleert werden.', 'error'); return; }
         for (const k of Object.values(STORAGE_KEYS)) localStorage.removeItem(k);
         location.reload();
       });
@@ -4466,8 +4509,13 @@
       });
     }
 
-    function init() {
+    async function init() {
       loadState();
+      try { await loadLargeData(); } catch (err) {
+        if (largeDb) { largeDb.close(); largeDb = null; }
+        toast("IndexedDB konnte nicht geladen werden. Änderungen sind deaktiviert, um Datenverlust zu vermeiden.", "error");
+        return;
+      }
       applyTheme();
       renderTopbar();
       renderFileList();
