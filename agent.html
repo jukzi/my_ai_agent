@@ -1381,8 +1381,11 @@
             <span class="field-hint">Wird ausschließlich lokal im <code>localStorage</code> deines Browsers gespeichert.</span>
           </div>
           <div class="field">
-            <label for="cfgModel">Modell</label>
-            <input type="text" id="cfgModel" placeholder="mistralai/mistral-nemo" />
+            <label for="cfgModel">Modell (Auswahl oder Freitext)</label>
+            <datalist id="cfgModels"></datalist>
+            <button type="button" class="btn btn-outline" id="btnCheckApi">API prüfen &amp; Modelle laden</button>
+            <span id="apiCheckStatus" class="field-hint" role="status"></span>
+            <input type="text" id="cfgModel" list="cfgModels" placeholder="mistralai/mistral-nemo" />
           </div>
           <div class="field-row">
             <div class="field">
@@ -1417,6 +1420,8 @@
               <input type="password" id="cfgGithubToken" placeholder="ghp_... oder github_pat_..." autocomplete="off" />
             </div>
             <div class="field">
+              <button type="button" class="btn btn-outline" id="btnCheckGithub">GitHub-Token prüfen</button>
+              <span id="githubCheckStatus" class="field-hint" role="status"></span>
               <label for="cfgGithubRepo">Standard-Repository (owner/repo)</label>
               <input type="text" id="cfgGithubRepo" placeholder="mein-user/mein-repo" />
             </div>
@@ -4035,9 +4040,65 @@
       $('#btnCloseSettings').addEventListener('click', () => $('#settingsModal').classList.remove('open'));
       $('#btnCancelSettings').addEventListener('click', () => $('#settingsModal').classList.remove('open'));
       $('#btnSaveSettings').addEventListener('click', saveSettingsFromModal);
-      $('#settingsModal').addEventListener('click', (e) => {
-        if (e.target.id === 'settingsModal') $('#settingsModal').classList.remove('open');
-      });
+      function bindCheck(buttonId, statusId, getInputs, check, apply = () => {}) {
+        const button = $(buttonId);
+        const status = $(statusId);
+        let revision = 0;
+        $(buttonId === '#btnCheckApi' ? '#cfgBaseUrl' : '#cfgGithubRepo').addEventListener('input', reset);
+        $(buttonId === '#btnCheckApi' ? '#cfgApiKey' : '#cfgGithubToken').addEventListener('input', reset);
+        $('#btnSettings').addEventListener('click', reset);
+        $('#btnModelPill').addEventListener('click', reset);
+        function reset() { revision++; status.textContent = ''; apply([]); }
+        button.addEventListener('click', async () => {
+          reset();
+          const current = revision;
+          button.disabled = true;
+          status.textContent = 'Prüft Verbindung…';
+          try {
+            const result = await check(...getInputs());
+            if (current !== revision) return;
+            apply(result.models || []);
+            status.textContent = result.message;
+          } catch (err) {
+            if (current === revision) status.textContent = err.message || 'Verbindung fehlgeschlagen.';
+          } finally { button.disabled = false; }
+        });
+      }
+      async function checkEndpoint(url, token) {
+        const response = await fetch(url, {
+          headers: token ? { Authorization: 'Bearer ' + token } : {},
+          redirect: 'error',
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok) throw new Error('Verbindung fehlgeschlagen (HTTP ' + response.status + ').');
+        return response.json();
+      }
+      bindCheck('#btnCheckApi', '#apiCheckStatus',
+        () => [$('#cfgBaseUrl').value.trim(), $('#cfgApiKey').value.trim()],
+        async (base, token) => {
+          const url = new URL(base || DEFAULT_CONFIG.baseUrl);
+          if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+            throw new Error('Ungültige API Base URL.');
+          }
+          url.pathname = url.pathname.replace(/\/+$/, '') + '/models';
+          const data = await checkEndpoint(url, token);
+          if (!Array.isArray(data?.data)) throw new Error('Der Anbieter hat keine Modellliste zurückgegeben.');
+          const models = [...new Set(data.data.map(m => m?.id).filter(id => typeof id === 'string' && id))].sort();
+          return { models, message: 'Modell-Endpunkt erreichbar: ' + models.length + ' Modelle. Chat-Zugriff wurde nicht geprüft.' };
+        }, models => $('#cfgModels').replaceChildren(...models.map(id => {
+          const option = document.createElement('option');
+          option.value = id;
+          return option;
+        })));
+      bindCheck('#btnCheckGithub', '#githubCheckStatus',
+        () => [$('#cfgGithubRepo').value.trim(), $('#cfgGithubToken').value.trim()],
+        async (repo, token) => {
+          if (!token) throw new Error('Bitte einen GitHub-Token eingeben.');
+          if (repo && !/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('Repository als owner/repo eingeben.');
+          await checkEndpoint('https://api.github.com/user', token);
+          if (repo) await checkEndpoint('https://api.github.com/repos/' + repo.split('/').map(encodeURIComponent).join('/'), token);
+          return { message: repo ? 'Token gültig, Repository erreichbar. Schreibrechte wurden nicht geprüft.' : 'Token gültig.' };
+        });
 
       // Backup export / import / reset
       $('#btnExportBackup').addEventListener('click', () => {
