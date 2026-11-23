@@ -3549,6 +3549,18 @@
       try { sessionStorage.setItem(usageKey, JSON.stringify(usageTotal)); } catch {}
       renderUsage();
     }
+    function serializeChatPayload(messages, tools) {
+      return JSON.stringify( {
+        model: state.config.model || DEFAULT_CONFIG.model,
+        messages,
+        temperature: Number(state.config.temperature ?? 0.2),
+        tools: tools.length ? tools : undefined,
+        tool_choice: tools.length ? 'auto' : undefined,
+      });
+    }
+    function payloadSize(body) {
+      return formatBytes(new TextEncoder().encode(body).byteLength);
+    }
     async function callChatApi(messages, tools, signal) {
       const baseUrl = (state.config.baseUrl || DEFAULT_CONFIG.baseUrl).replace(/\/+$/, '');
       const url = `${baseUrl}/chat/completions`;
@@ -3560,16 +3572,8 @@
       }
 
       const rates = state.config.tokenRatesUsd?.[JSON.stringify([baseUrl, state.config.model || DEFAULT_CONFIG.model])] || {};
-      const payload = {
-        model: state.config.model || DEFAULT_CONFIG.model,
-        messages,
-        temperature: Number(state.config.temperature ?? 0.2),
-        tools: tools.length ? tools : undefined,
-        tool_choice: tools.length ? 'auto' : undefined,
-      };
-
-      const body = JSON.stringify(payload);
-      $('#lastPayload').textContent = formatBytes(new TextEncoder().encode(body).byteLength);
+      const body = serializeChatPayload(messages, tools);
+      $('#lastPayload').textContent = payloadSize(body);
       const res = await fetch(url, {
         method: 'POST',
         headers,
@@ -4460,6 +4464,8 @@
           if (typeof text !== 'string' || !text.trim()) throw new Error('Keine Zusammenfassung erhalten.');
           state.chat.push({id:uid('msg'), role:'assistant', contextSummary:true, content:'**Zusammenfassung des bisherigen Chats**\n\n' + text.trim(), tool_calls:[], timestamp:Date.now()});
           saveChat(); renderChat();
+          const runtime = toolsFor(activeChat);
+          $('#lastPayload').textContent = 'ca. ' + payloadSize(serializeChatPayload(runtime.buildApiMessages(), runtime.getActiveToolDefinitions()));
         } catch (err) {
           if (!controller.signal.aborted) toast('Zusammenfassen fehlgeschlagen: ' + err.message, 'error');
         } finally {
