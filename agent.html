@@ -3649,8 +3649,14 @@
       }).join('\n');
     }
 
+    const chatScrollKey = 'browsercode_chat_scroll_v1';
+    let initialChatScroll = null;
+    try { initialChatScroll = sessionStorage.getItem(chatScrollKey); } catch {}
+
     function renderChat() {
       const container = $('#chatMessages');
+      const oldTop = container.scrollTop;
+      const atBottom = container.scrollHeight - container.clientHeight - oldTop <= 24;
       if (!state.chat.length) {
         container.innerHTML = `
           <div class="welcome-card">
@@ -3692,7 +3698,7 @@
           ` : '';
           return `
             <div class="msg-row user">
-              <div class="msg-meta"><span>Du</span><span>${time}</span></div>
+              <div class="msg-meta"><span>Du</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
               <div class="msg-bubble">
                 <div class="md-body">${renderMarkdown(m.content)}</div>
                 ${attsHtml}
@@ -3744,7 +3750,7 @@
 
           return `
             <div class="msg-row assistant">
-              <div class="msg-meta"><span>Agent</span><span>${time}</span></div>
+              <div class="msg-meta"><span>Agent</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
               ${m.content?.trim() ? `<div class="msg-bubble"><div class="md-body">${renderMarkdown(m.content)}</div></div>` : ''}
               ${toolsHtml}
             </div>
@@ -3755,7 +3761,8 @@
       for (const el of container.querySelectorAll('.tool-card-body > [data-tool-text]')) {
         el.textContent = toolText[Number(el.dataset.toolText)] ?? '';
       }
-      container.scrollTop = container.scrollHeight;
+      container.scrollTop = initialChatScroll !== null ? Number(initialChatScroll) : atBottom ? container.scrollHeight : oldTop;
+      initialChatScroll = null;
     }
 
     function renderPendingAttachments() {
@@ -4388,7 +4395,48 @@
       });
 
       // Chat messages delegation (tool cards, lightbox, copy code, quick prompts, open file)
-      $('#chatMessages').addEventListener('click', (e) => {
+      $('#chatMessages').addEventListener('scroll', (e) => {
+        try { sessionStorage.setItem(chatScrollKey, String(e.currentTarget.scrollTop)); } catch {}
+      }, { passive: true });
+      $('#chatMessages').addEventListener('click', async (e) => {
+        const copy = e.target.closest('[data-copy-message]');
+        if (copy) {
+          const msg = state.chat.find(m => m.id === copy.dataset.copyMessage);
+          if (!msg) return;
+          const text = String(msg.content ?? '');
+          // Copy rendered formatting without copying active elements or attributes.
+          const rendered = copy.closest('.msg-row')?.querySelector('.msg-bubble > .md-body');
+          const formatted = document.createElement('div');
+          const allowed = new Set('P STRONG B EM I H1 H2 H3 BLOCKQUOTE UL OL LI PRE CODE TABLE THEAD TBODY TR TH TD BR'.split(' '));
+          function appendSafe(source, target) {
+            for (const node of source.childNodes) {
+              if (node.nodeType === Node.TEXT_NODE) target.append(node.textContent);
+              else if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.matches('.code-header, script, style, iframe, svg, img')) continue;
+                if (allowed.has(node.tagName)) {
+                  const child = document.createElement(node.tagName.toLowerCase());
+                  appendSafe(node, child);
+                  target.append(child);
+                } else appendSafe(node, target);
+              }
+            }
+          }
+          if (rendered) appendSafe(rendered, formatted);
+          else formatted.textContent = text;
+          try {
+            if (typeof ClipboardItem === 'function' && navigator.clipboard?.write) {
+              await navigator.clipboard.write([new ClipboardItem({
+                'text/plain': new Blob([text], { type: 'text/plain' }),
+                'text/html': new Blob([formatted.innerHTML], { type: 'text/html' }),
+              })]);
+              toast('Nachricht als Text und HTML kopiert.', 'success');
+            } else {
+              await navigator.clipboard.writeText(text);
+              toast('Nachricht als Text kopiert. HTML wird nicht unterstützt.', 'warn');
+            }
+          } catch { toast('Kopieren fehlgeschlagen. Bitte Browser-Berechtigungen prüfen.', 'error'); }
+          return;
+        }
         const qp = e.target.closest('[data-prompt]');
         if (qp) { sendUserMessage(qp.dataset.prompt); return; }
 
