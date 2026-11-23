@@ -1261,6 +1261,17 @@
     .preview-fullscreen > :is(img,iframe) { display:block; }
     .search-results { max-height:200px; overflow:auto; }
     .search-results button { display:block; text-align:left; width:100%; white-space:normal; overflow-wrap:anywhere; }
+    .toolbar-search { position: relative; }
+    #globalSearch, #chatPicker { background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 4px 6px; }
+    #globalSearch { width: clamp(80px, 13vw, 180px); }
+    #globalSearch::placeholder { color: var(--text-secondary); opacity: 1; }
+    #chatPicker { max-width: clamp(80px, 12vw, 160px); }
+    .toolbar-search .search-results { position: absolute; top: calc(100% + 6px); right: 0; width: min(360px, 75vw); background: var(--bg-panel); color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
+    .toolbar-search .search-results:empty { display: none; }
+    @media (max-width: 760px) {
+      .topbar { height: auto; min-height: 50px; flex-wrap: wrap; padding-block: 5px; }
+      .topbar-right { flex-wrap: wrap; flex-shrink: 1; }
+    }
   </style>
 </head>
 <body>
@@ -1287,7 +1298,10 @@
       </div>
 
       <div class="topbar-right">
+        <div class="toolbar-search"><input type="search" id="globalSearch" aria-label="Chat und Workspace durchsuchen" placeholder="Suchen…"><div id="searchResults" class="search-results" aria-live="polite"></div></div>
         <button class="btn btn-outline btn-sm" id="btnNewChat" title="Neuen Chat starten (Workspace & Gedächtnis bleiben erhalten)">Neuer Chat</button>
+        <select id="chatPicker" aria-label="Chat auswählen"></select>
+        <button type="button" class="btn btn-sm" id="renameChat">Umbenennen</button>
         <button class="btn btn-icon" id="btnTheme" title="Hell/Dunkel umschalten" aria-label="Theme umschalten">☀</button>
         <button class="btn btn-outline btn-sm" id="btnSettings">Einstellungen</button>
       </div>
@@ -1350,8 +1364,8 @@
 
       <!-- Center Chat Panel -->
       <main class="chat-panel" id="chatPanel">
-        <details style="padding:6px 18px"><summary>Chat &amp; Workspace durchsuchen</summary><input type="search" id="globalSearch" aria-label="Chat und Workspace durchsuchen" placeholder="Suchbegriff…"><div id="searchResults" class="search-results" aria-live="polite"></div></details>
-        <div style="padding:6px 18px"><label>Chat <select id="chatPicker" style="background:var(--bg-panel);color:var(--text-primary);max-width:60%"></select></label> <button class="btn btn-sm" id="renameChat">Umbenennen</button></div>
+
+
         <div class="chat-messages" id="chatMessages"></div>
 
         <div class="composer-wrap">
