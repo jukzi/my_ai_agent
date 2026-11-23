@@ -1310,6 +1310,7 @@
       <div class="topbar-right">
         <div class="toolbar-search"><input type="search" id="globalSearch" aria-label="Chat und Workspace durchsuchen" placeholder="Suchen…"><div id="searchResults" class="search-results" aria-live="polite"></div></div>
         <button class="btn btn-outline btn-sm" id="btnNewChat" title="Neuen Chat starten (Workspace & Gedächtnis bleiben erhalten)">Neuer Chat</button>
+        <button type="button" class="btn btn-sm" id="btnForkChat">Chat kopieren</button>
         <select id="chatPicker" aria-label="Chat auswählen"></select>
         <button type="button" class="btn btn-sm" id="renameChat">Umbenennen</button>
         <button class="btn btn-icon" id="btnTheme" title="Hell/Dunkel umschalten" aria-label="Theme umschalten">☀</button>
@@ -1794,7 +1795,11 @@
           };
         }
       });
-      loadChats(state.chat);
+      loadChats(state.chat, state.workspace);
+      await largeTransaction('readwrite', store => {
+        store.put({chats, active:activeChat.id}, STORAGE_KEYS.CHAT);
+        store.delete(STORAGE_KEYS.WORKSPACE);
+      });
       localStorage.removeItem(STORAGE_KEYS.WORKSPACE);
       localStorage.removeItem(STORAGE_KEYS.CHAT);
     }
@@ -1804,13 +1809,15 @@
         .then(updateStorageMeter)
         .catch(() => toast('IndexedDB: Änderungen konnten nicht gespeichert werden. Bitte ein Backup exportieren.', 'error'));
     }
-    const saveWorkspace = () => saveLarge(STORAGE_KEYS.WORKSPACE, state.workspace);
+    const saveWorkspace = () => saveChat();
     let chats, activeChat;
-    function loadChats(data) {
+    function loadChats(data, legacyWorkspace = {}) {
       chats = Array.isArray(data?.chats) ? data.chats.filter(c => typeof c?.id === 'string' && typeof c.title === 'string' && Array.isArray(c.messages)) : [];
       if (!chats.length) chats = [{id:uid('chat'), title:'Chat 1', messages:Array.isArray(data) ? data : []}];
       activeChat = chats.find(c => c.id === data?.active) || chats[0];
+      for (const chat of chats) chat.workspace ??= chat === activeChat ? legacyWorkspace : {};
       state.chat = activeChat.messages;
+      state.workspace = activeChat.workspace;
     }
     const saveChat = () => saveLarge(STORAGE_KEYS.CHAT, {chats, active:activeChat.id});
     function chatPicker() {
@@ -1821,7 +1828,12 @@
     function switchChat(chat) {
       if (!chat || state.isRunning) { chatPicker(); return false; }
       activeChat = chat;
+      closePreview();
       state.chat = chat.messages;
+      state.workspace = chat.workspace;
+      state.pendingAttachments = [];
+      renderPendingAttachments();
+      renderFileList();
       saveChat(); chatPicker(); renderChat();
       $('#chatMessages').scrollTop = $('#chatMessages').scrollHeight;
       $('#chatInput').dispatchEvent(new Event('input'));
@@ -4422,14 +4434,16 @@
         const title = prompt('Chatname:', suggestion)?.trim();
         if (title) { chat.title = title; saveChat(); chatPicker(); }
       });
-      $('#btnNewChat').addEventListener('click', () => {
+      function createChat(fork) {
         if (state.isRunning) return;
         let number = chats.length + 1;
         while (chats.some(chat => chat.title === 'Chat ' + number)) number++;
         const title = 'Chat ' + number;
-        const chat = {id:uid('chat'), title, messages:[]};
+        const chat = {id:uid('chat'), title, messages:fork ? structuredClone(state.chat) : [], workspace:fork ? structuredClone(state.workspace) : {}};
         chats.push(chat); switchChat(chat);
-      });
+      }
+      $('#btnNewChat').addEventListener('click', () => createChat(false));
+      $('#btnForkChat').addEventListener('click', () => createChat(true));
 
       // Settings modal
       $('#optGithub').addEventListener('change', (e) => {
@@ -4576,8 +4590,10 @@
         try {
           const data = JSON.parse(await file.text());
           if (data.config) state.config = { ...structuredClone(DEFAULT_CONFIG), ...data.config };
-          if (data.workspace) state.workspace = data.workspace;
-          if (data.chatCollection || Array.isArray(data.chat)) { loadChats(data.chatCollection || data.chat); chatPicker(); }
+          if (state.isRunning) throw new Error("Bitte zuerst den Agenten stoppen.");
+          closePreview();
+          if (data.chatCollection || Array.isArray(data.chat)) { loadChats(data.chatCollection || data.chat, data.workspace || {}); chatPicker(); }
+          else if (data.workspace) state.workspace = activeChat.workspace = data.workspace;
           if (data.memory) state.memory = data.memory;
           if (data.todos) state.todos = data.todos;
           saveConfig(); saveWorkspace(); saveChat(); saveMemory(); saveTodos();
@@ -4613,7 +4629,7 @@
       $('#btnDownloadZip').addEventListener('click', () => VFS.downloadZip());
       $('#btnClearWs').addEventListener('click', () => {
         if (!confirm('Alle Dateien im Workspace löschen?')) return;
-        state.workspace = {};
+        state.workspace = activeChat.workspace = {};
         closePreview();
         saveWorkspace();
         renderFileList();
