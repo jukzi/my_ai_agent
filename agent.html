@@ -1235,6 +1235,12 @@
         box-shadow: var(--shadow-lg);
       }
     }
+    .model-picker { display: flex; position: relative; }
+    .model-picker #cfgModel { min-width: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+    .model-picker #btnModels { height: auto; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+    #cfgModels { position: absolute; top: 100%; left: 0; right: 0; z-index: 2; max-height: 180px; overflow-y: auto; background: var(--bg-panel); color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
+    #cfgModels button { display: block; width: 100%; padding: 6px 8px; text-align: left; overflow-wrap: anywhere; }
+    #cfgModels button:hover, #cfgModels button:focus-visible { background: var(--bg-hover); }
   </style>
 </head>
 <body>
@@ -1382,10 +1388,9 @@
           </div>
           <div class="field">
             <label for="cfgModel">Modell (Auswahl oder Freitext)</label>
-            <select id="cfgModels" aria-label="Geladene Modelle auswählen" disabled><option value="">Modell auswählen…</option></select>
-            <button type="button" class="btn btn-outline" id="btnCheckApi">API prüfen &amp; Modelle laden</button>
+                        <button type="button" class="btn btn-outline" id="btnCheckApi">API prüfen &amp; Modelle laden</button>
             <span id="apiCheckStatus" class="field-hint" role="status"></span>
-            <input type="text" id="cfgModel" placeholder="mistralai/mistral-nemo" />
+            <div class="model-picker"><input type="text" id="cfgModel" placeholder="mistralai/mistral-nemo" /><button type="button" class="btn btn-outline" id="btnModels" aria-label="Geladene Modelle anzeigen" aria-expanded="false" aria-controls="cfgModels" disabled>▾</button><div id="cfgModels" hidden></div></div>
           </div>
           <div class="field-row">
             <div class="field">
@@ -4086,13 +4091,39 @@
           const models = [...new Set(data.data.map(m => m?.id).filter(id => typeof id === 'string' && id))].sort();
           return { models, message: 'Modell-Endpunkt erreichbar: ' + models.length + ' Modelle. Chat-Zugriff wurde nicht geprüft.' };
         }, models => {
-          const select = $('#cfgModels');
-          select.replaceChildren(new Option('Modell auswählen…', ''), ...models.map(id => new Option(id, id)));
-          select.disabled = !models.length;
+          modelList.replaceChildren(...models.map(id => {
+            const option = document.createElement('button');
+            option.type = 'button';
+            option.textContent = id;
+            option.addEventListener('click', () => {
+              $('#cfgModel').value = id;
+              closeModels();
+              $('#cfgModel').focus();
+            });
+            return option;
+          }));
+          modelToggle.disabled = !models.length;
+          closeModels();
         });
-      $('#cfgModels').addEventListener('change', (e) => {
-        if (e.target.value) $('#cfgModel').value = e.target.value;
-        e.target.selectedIndex = 0;
+      const modelList = $('#cfgModels');
+      const modelToggle = $('#btnModels');
+      function closeModels() {
+        modelList.hidden = true;
+        modelToggle.setAttribute('aria-expanded', 'false');
+      }
+      modelToggle.addEventListener('click', () => {
+        modelList.hidden = !modelList.hidden;
+        modelToggle.setAttribute('aria-expanded', String(!modelList.hidden));
+      });
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.model-picker')) closeModels();
+      });
+      modelToggle.closest('.model-picker').addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modelList.hidden) {
+          e.stopPropagation();
+          closeModels();
+          modelToggle.focus();
+        }
       });
       bindCheck('#btnCheckGithub', '#githubCheckStatus',
         () => [$('#cfgGithubRepo').value.trim(), $('#cfgGithubToken').value.trim()],
