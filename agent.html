@@ -1259,6 +1259,9 @@
     .preview-fullscreen > [data-preview-download] { left:40px; }
     .preview-fullscreen:fullscreen :is(img,iframe) { height:100% !important; }
     .preview-fullscreen > :is(img,iframe) { display:block; }
+    .preview-fullscreen:has(> img) { width: min(100%, 320px); }
+    .preview-fullscreen > img { width: 100%; height: auto; object-fit: contain; }
+    .preview-fullscreen:fullscreen:has(> img) { width: 100%; }
     .search-results { max-height:200px; overflow:auto; }
     .search-results button { display:block; text-align:left; width:100%; white-space:normal; overflow-wrap:anywhere; }
     .toolbar-search { position: relative; }
