@@ -1301,7 +1301,7 @@
         </div>
         <button class="model-pill" id="btnModelPill" title="API & Modell konfigurieren">
           <span class="status-dot" id="statusDot"></span>
-          <span id="sessionUsage" title="Gemeldeter Verbrauch in dieser Tab-Sitzung" style="flex-shrink:0"></span><span id="modelLabel">mistralai/mistral-nemo</span>
+          <span id="sessionUsage" title="Gemeldeter Verbrauch in dieser Tab-Sitzung" style="flex-shrink:0"></span><span id="modelLabel">Einstellungen</span>
         </button>
       </div>
 
@@ -1314,12 +1314,12 @@
 
       <div class="topbar-right">
         <div class="toolbar-search"><input type="search" id="globalSearch" aria-label="Chat und Workspace durchsuchen" placeholder="Suchen…"><div id="searchResults" class="search-results" aria-live="polite"></div></div>
-        <button class="btn btn-outline btn-sm" id="btnNewChat" title="Neuen Chat starten (Workspace & Gedächtnis bleiben erhalten)">Neuer Chat</button>
-        <button type="button" class="btn btn-sm" id="btnForkChat">Chat kopieren</button>
-        <span class="chat-picker-status"><span id="chatStatusDot" class="status-dot busy" title="Chat läuft" aria-hidden="true" hidden></span><select id="chatPicker" aria-label="Chat auswählen"></select></span>
+        <button class="btn btn-outline btn-sm" id="btnNewChat" title="Leeren Chat starten">Neu</button>
+        <button type="button" class="btn btn-sm" id="btnForkChat">Kopie</button>
         <button type="button" class="btn btn-sm" id="renameChat">Umbenennen</button>
+        <span class="chat-picker-status"><span id="chatStatusDot" class="status-dot busy" title="Chat läuft" aria-hidden="true" hidden></span><select id="chatPicker" aria-label="Chat auswählen"></select></span>
+        <button type="button" class="btn btn-sm btn-icon" id="deleteChat" title="Chat löschen" aria-label="Chat löschen">×</button>
         <button class="btn btn-icon" id="btnTheme" title="Hell/Dunkel umschalten" aria-label="Theme umschalten">☀</button>
-        <button class="btn btn-outline btn-sm" id="btnSettings">Einstellungen</button>
       </div>
     </header>
 
@@ -3836,7 +3836,7 @@
 
     function renderTopbar() {
       renderUsage();
-      $('#modelLabel').textContent = state.config.model || DEFAULT_CONFIG.model;
+      $('#modelLabel').textContent = state.config.apiKey?.trim() && state.config.model?.trim() ? state.config.model : 'Einstellungen';
       const dot = $('#statusDot');
       if (!state.isRunning) {
         dot.className = 'status-dot' + (state.config.apiKey ? '' : ' warn');
@@ -4471,7 +4471,6 @@
       });
       $('#cfgModel').addEventListener('input', loadRateFields);
       $('#cfgBaseUrl').addEventListener('input', loadRateFields);
-      $('#btnSettings').addEventListener('click', openSettings);
       $('#btnModelPill').addEventListener('click', openSettings);
       $('#chatPicker').addEventListener('change', e => switchChat(chats.find(c => c.id === e.target.value)));
       $('#renameChat').addEventListener('click', async () => {
@@ -4508,6 +4507,15 @@
       }
       $('#btnNewChat').addEventListener('click', () => createChat(false));
       $('#btnForkChat').addEventListener('click', () => createChat(true));
+      $('#deleteChat').addEventListener('click', () => {
+        const chat = activeChat;
+        if (state.isRunning || runs.has(chat)) { toast('Bitte stoppe zuerst den aktiven Chat.', 'warn'); return; }
+        if (!confirm('„' + chat.title + '“ samt Verlauf und Workspace löschen?')) return;
+        const index = chats.indexOf(chat);
+        chats.splice(index, 1);
+        if (!chats.length) chats.push({id:uid('chat'), title:'Chat 1', messages:[], workspace:{}});
+        switchChat(chats[Math.min(index, chats.length - 1)]);
+      });
 
       // Settings modal
       $('#optGithub').addEventListener('change', (e) => {
@@ -4523,7 +4531,6 @@
         $(buttonId !== '#btnCheckGithub' ? '#cfgBaseUrl' : '#cfgGithubRepo').addEventListener('input', reset);
         $(buttonId !== '#btnCheckGithub' ? '#cfgApiKey' : '#cfgGithubToken').addEventListener('input', reset);
         if (buttonId === '#btnCheckApiToken') $('#cfgModel').addEventListener('input', reset);
-        $('#btnSettings').addEventListener('click', reset);
         $('#btnModelPill').addEventListener('click', reset);
         function reset() { revision++; status.textContent = ''; apply([]); }
         button.addEventListener('click', async () => {
