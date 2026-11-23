@@ -1382,10 +1382,10 @@
           </div>
           <div class="field">
             <label for="cfgModel">Modell (Auswahl oder Freitext)</label>
-            <datalist id="cfgModels"></datalist>
+            <select id="cfgModels" aria-label="Geladene Modelle auswählen" disabled><option value="">Modell auswählen…</option></select>
             <button type="button" class="btn btn-outline" id="btnCheckApi">API prüfen &amp; Modelle laden</button>
             <span id="apiCheckStatus" class="field-hint" role="status"></span>
-            <input type="text" id="cfgModel" list="cfgModels" placeholder="mistralai/mistral-nemo" />
+            <input type="text" id="cfgModel" placeholder="mistralai/mistral-nemo" />
           </div>
           <div class="field-row">
             <div class="field">
@@ -4085,11 +4085,15 @@
           if (!Array.isArray(data?.data)) throw new Error('Der Anbieter hat keine Modellliste zurückgegeben.');
           const models = [...new Set(data.data.map(m => m?.id).filter(id => typeof id === 'string' && id))].sort();
           return { models, message: 'Modell-Endpunkt erreichbar: ' + models.length + ' Modelle. Chat-Zugriff wurde nicht geprüft.' };
-        }, models => $('#cfgModels').replaceChildren(...models.map(id => {
-          const option = document.createElement('option');
-          option.value = id;
-          return option;
-        })));
+        }, models => {
+          const select = $('#cfgModels');
+          select.replaceChildren(new Option('Modell auswählen…', ''), ...models.map(id => new Option(id, id)));
+          select.disabled = !models.length;
+        });
+      $('#cfgModels').addEventListener('change', (e) => {
+        if (e.target.value) $('#cfgModel').value = e.target.value;
+        e.target.selectedIndex = 0;
+      });
       bindCheck('#btnCheckGithub', '#githubCheckStatus',
         () => [$('#cfgGithubRepo').value.trim(), $('#cfgGithubToken').value.trim()],
         async (repo, token) => {
