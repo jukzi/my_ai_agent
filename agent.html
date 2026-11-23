@@ -3919,6 +3919,9 @@
       const row=(cells,tag)=>'<tr>'+cells.map(v=>'<'+tag+'>'+escapeHtml(v)+'</'+tag+'>').join('')+'</tr>';
       return '<div class="md-body md-table-scroll"><table><thead>'+row(t.headers,'th')+'</thead><tbody>'+t.rows.map(r=>row(r,'td')).join('')+'</tbody></table></div>';
     }
+    function canRetryChat(message) {
+      return Boolean(message?.retryable || message?.tool_calls?.some(call => call.status === 'error'));
+    }
     function renderChat() {
       const container = $('#chatMessages');
       const oldTop = container.scrollTop;
@@ -4010,7 +4013,7 @@
             <div class="msg-row assistant" data-search-message="${escapeHtml(m.id)}">
               <div class="msg-meta"><span>Agent</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
               ${m.content?.trim() ? `<div class="msg-bubble"><div class="md-body">${renderMarkdown(m.content)}</div></div>` : ''}
-              ${m === state.chat.at(-1) && m.retryable ? `<button type="button" class="btn btn-outline btn-sm" data-retry-chat>Erneut versuchen</button>` : ""}
+              ${m === state.chat.at(-1) && canRetryChat(m) ? `<button type="button" class="btn btn-outline btn-sm" data-retry-chat>Erneut versuchen</button>` : ""}
               ${toolsHtml}
             </div>
           `;
@@ -4815,8 +4818,8 @@
       }, { passive: true });
       $('#chatMessages').addEventListener('click', async (e) => {
         if (e.target.closest('[data-retry-chat]')) {
-          if (state.isRunning || runs.has(activeChat) || !state.chat.at(-1)?.retryable) return;
-          state.chat.pop();
+          if (state.isRunning || runs.has(activeChat) || !canRetryChat(state.chat.at(-1))) return;
+          if (state.chat.at(-1).retryable) state.chat.pop();
           saveChat();
           renderChat();
           await runAgentLoop();
