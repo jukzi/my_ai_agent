@@ -2953,6 +2953,12 @@
         parameters: {type: 'object', properties: {file_path: {type: 'string'}}, required: ['file_path']},
       }});
 
+      tools.push({ type: 'function', function: {
+        name: 'JinaReader',
+        description: 'Liest öffentliche Webseiten über den externen Dienst Jina Reader, z. B. wenn WebFetch wegen CORS scheitert. Keine privaten URLs oder URLs mit geheimen Parametern senden.',
+        parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
+      }});
+
       // Optional Tools
       if (state.config.optionalTools.python) {
         tools.push({
@@ -3202,11 +3208,27 @@
           VFS.write(norm, JSON.stringify(nb, null, 2), { mime: 'application/x-ipynb+json' });
           return `Notebook ${norm} aktualisiert (${mode} Zelle ${idx}).`;
         }
+        case 'JinaReader':
         case 'WebFetch': {
-          const res = await fetch(args.url);
-          const text = await res.text();
-          const clean = text.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-          return clean.slice(0, 12000) + (clean.length > 12000 ? '\n… [gekürzt]' : '');
+          const url = new URL(args.url);
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+            throw new Error('Bitte eine HTTP(S)-URL ohne Zugangsdaten angeben.');
+          }
+          url.hash = '';
+          const options = () => ({ credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
+          const limit = text => text.slice(0, 12000) + (text.length > 12000 ? '\n… [gekürzt]' : '');
+          if (name === 'JinaReader') {
+            const reader = await fetch('https://r.jina.ai/' + url.href, { ...options(), redirect: 'error' });
+            if (!reader.ok) throw new Error('Jina Reader: HTTP ' + reader.status);
+            return 'Quelle: Jina Reader (externer Abruf)\n' + limit(await reader.text());
+          }
+          const response = await fetch(url.href, options());
+          if (!response.ok) throw new Error('WebFetch: HTTP ' + response.status);
+          const text = await response.text();
+          const clean = /text\/html/i.test(response.headers.get('content-type') || '')
+            ? text.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+            : text;
+          return limit(clean);
         }
         case 'ShowImage': {
           const path = normalizePath(args.file_path);
