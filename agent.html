@@ -1250,6 +1250,15 @@
     .preview-fullscreen:fullscreen { width:100%; height:100%; max-width:none; }
     .preview-fullscreen:fullscreen iframe { width:100%; height:calc(100% - 36px) !important; }
     .preview-fullscreen:fullscreen img { display:block; margin:auto; width:100%; height:calc(100% - 36px); max-height:none !important; object-fit:contain; }
+    .preview-fullscreen { position:relative; width:fit-content; max-width:100%; }
+    .preview-fullscreen:has(iframe) { width:100%; }
+    .preview-fullscreen > [data-fullscreen], .preview-fullscreen > [data-preview-download] { position:absolute; bottom:8px; z-index:1; background:var(--bg-panel); border-color:var(--border-strong); }
+    .preview-fullscreen > [data-fullscreen] { left:8px; }
+    .preview-fullscreen > [data-preview-download] { left:40px; }
+    .preview-fullscreen:fullscreen :is(img,iframe) { height:100% !important; }
+    .preview-fullscreen > :is(img,iframe) { display:block; }
+    .search-results { max-height:200px; overflow:auto; }
+    .search-results button { display:block; text-align:left; width:100%; white-space:normal; overflow-wrap:anywhere; }
   </style>
 </head>
 <body>
@@ -1339,6 +1348,7 @@
 
       <!-- Center Chat Panel -->
       <main class="chat-panel" id="chatPanel">
+        <details style="padding:6px 18px"><summary>Chat &amp; Workspace durchsuchen</summary><input type="search" id="globalSearch" aria-label="Chat und Workspace durchsuchen" placeholder="Suchbegriff…"><div id="searchResults" class="search-results" aria-live="polite"></div></details>
         <div class="chat-messages" id="chatMessages"></div>
 
         <div class="composer-wrap">
@@ -3771,7 +3781,7 @@
             </div>
           ` : '';
           return `
-            <div class="msg-row user">
+            <div class="msg-row user" data-search-message="${escapeHtml(m.id)}">
               <div class="msg-meta"><span>Du</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
               <div class="msg-bubble">
                 <div class="md-body">${renderMarkdown(m.content)}</div>
@@ -3812,7 +3822,7 @@
                       </div>
                       <span class="tool-status ${tc.status}">${statusLabel}</span>
                     </div>
-                    ${htmlPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button>${htmlPreview}</div>` : ""}
+                    ${htmlPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button><button type="button" class="btn btn-sm btn-icon" data-preview-download="${escapeHtml(targetPath)}" title="Herunterladen" aria-label="Herunterladen">↓</button>${htmlPreview}</div>` : ""}
                     <div class="tool-card-body">
                       <div class="tool-section-label">Argumente</div>
                       <div class="tool-pre" data-tool-text="${argsIndex}"></div>
@@ -3820,7 +3830,7 @@
                       <div class="tool-pre" data-tool-text="${resultIndex}"></div>
                       ${inline ? "" : imgPreview}
                     </div>
-                    ${inline && imgPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button>${imgPreview}</div>` : ""}
+                    ${inline && imgPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button><button type="button" class="btn btn-sm btn-icon" data-preview-download="${escapeHtml(targetPath)}" title="Herunterladen" aria-label="Herunterladen">↓</button>${imgPreview}</div>` : ""}
                   </div>
                 `;
               }).join('')}
@@ -3828,7 +3838,7 @@
           ` : '';
 
           return `
-            <div class="msg-row assistant">
+            <div class="msg-row assistant" data-search-message="${escapeHtml(m.id)}">
               <div class="msg-meta"><span>Agent</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
               ${m.content?.trim() ? `<div class="msg-bubble"><div class="md-body">${renderMarkdown(m.content)}</div></div>` : ''}
               ${toolsHtml}
@@ -4156,6 +4166,36 @@
           button.setAttribute('aria-label', label);
           button.innerHTML = active ? "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M3 9h6V3m12 6h-6V3M9 21v-6H3m12 6v-6h6\"/></svg>" : "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6\"/></svg>";
         }
+      });
+      $('#globalSearch').addEventListener('input', () => {
+        const q = $('#globalSearch').value.trim().toLowerCase();
+        const out = $('#searchResults');
+        out.replaceChildren();
+        if (!q) return;
+        const add = (label, action) => {
+          if (out.childElementCount >= 50) return;
+          const button = document.createElement('button');
+          button.type = 'button'; button.className = 'btn';
+          button.textContent = label;
+          button.addEventListener('click', action);
+          out.append(button);
+        };
+        const matches = value => String(value ?? '').toLowerCase().includes(q);
+        for (const m of state.chat) {
+          const hit = matches(m.content) ? m.content : (m.tool_calls || []).find(t => matches(t.result))?.result;
+          if (hit) add((m.role === 'user' ? 'Du: ' : 'Agent: ') + String(hit).slice(0, 160), () => {
+            Array.from($('[data-search-message]')).find(el => el.dataset.searchMessage === m.id)?.scrollIntoView({block:'center'});
+          });
+        }
+        for (const path of VFS.list()) {
+          const f = VFS.get(path);
+          if (matches(path) || (!f.isBinary && matches(f.content))) add('Datei: ' + path, () => openPreview(path));
+        }
+        if (!out.childElementCount) out.textContent = 'Keine Treffer.';
+      });
+      document.addEventListener('click', event => {
+        const button = event.target.closest('[data-preview-download]');
+        if (button) VFS.downloadFile(button.dataset.previewDownload);
       });
       // Topbar buttons
       $('#btnTheme').addEventListener('click', () => {
