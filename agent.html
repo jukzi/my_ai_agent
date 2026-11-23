@@ -2317,9 +2317,20 @@
             document.head.appendChild(s);
           });
         }
-        const py = await window.loadPyodide({
-          indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/',
-        });
+        const startupErrors = [];
+        let py;
+        try {
+          py = await window.loadPyodide({
+            indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/',
+            stderr: (line) => {
+              startupErrors.push(String(line));
+              if (startupErrors.length > 20) startupErrors.shift();
+            },
+          });
+        } catch (error) {
+          const detail = startupErrors.join('\n').slice(-4000);
+          throw new Error('Python konnte nicht initialisiert werden: ' + (error?.message || String(error)) + (detail ? '\n' + detail : ''), { cause: error });
+        }
         state.pyodide = py;
         toast('Python (Pyodide) bereit!', 'success');
         return py;
@@ -2372,6 +2383,9 @@
           resultVal = String(res);
           if (typeof res.destroy === 'function') res.destroy();
         }
+      } catch (error) {
+        const detail = logs.filter(line => line.startsWith('[stderr] ')).join('\n').slice(-4000);
+        throw new Error('Python-Ausführung fehlgeschlagen: ' + (error?.message || String(error)) + (detail ? '\n' + detail : ''), { cause: error });
       } finally {
         // Sync Pyodide /workspace -> VFS
         const walk = (dir, rel = '') => {
