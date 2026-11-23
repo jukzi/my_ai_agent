@@ -1279,6 +1279,9 @@
     .empty-chat .composer-wrap { border-top:0; }
     .empty-chat .composer-box { max-width:720px; border-color:var(--accent); }
     .composer-input { max-height:calc(4.5em + 6px); }
+    #chatInput { min-height:calc(4.5em + 6px); max-height:calc(4.5em + 6px); overflow-y:auto; }
+    .chat-panel:not(.empty-chat).compact-composer #chatInput { min-height:calc(1.5em + 6px); max-height:calc(1.5em + 6px); }
+    .chat-messages > :is(.msg-row, .agent-steps) { flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -1384,7 +1387,7 @@
               <textarea
                 id="chatInput"
                 class="composer-input"
-                rows="1"
+                rows="3"
                 placeholder="Nachricht eingeben… (Enter zum Senden, Shift+Enter für Zeilenumbruch, Bilder einfügen per Strg+V)"
               ></textarea>
               <button class="btn btn-primary" id="btnSend">Senden</button>
@@ -4853,6 +4856,29 @@
       updateStorageMeter();
       chatPicker();
       bindEvents();
+      const messages = $('#chatMessages');
+      const panel = $('#chatPanel');
+      const input = $('#chatInput');
+      let frame;
+      const fitComposer = () => {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => {
+          const compact = panel.classList.contains('compact-composer');
+          const reserve = compact ? 2 * parseFloat(getComputedStyle(input).lineHeight) : 0;
+          const last = messages.lastElementChild;
+          const slack = last ? messages.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom - messages.scrollTop - parseFloat(getComputedStyle(messages).paddingBottom) : Infinity;
+          const next = !panel.classList.contains('empty-chat') && slack < reserve - 0.5;
+          if (next !== compact) {
+            const pinned = messages.scrollHeight - messages.clientHeight - messages.scrollTop <= 24;
+            panel.classList.toggle('compact-composer', next);
+            if (pinned) messages.scrollTop = messages.scrollHeight;
+          }
+        });
+      };
+      const resize = new ResizeObserver(fitComposer);
+      const observeRows = () => { resize.disconnect(); resize.observe(messages); for (const row of messages.children) resize.observe(row); fitComposer(); };
+      new MutationObserver(observeRows).observe(messages, {childList:true});
+      observeRows();
       bindKeySetup();
     }
 
