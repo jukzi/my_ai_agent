@@ -613,7 +613,7 @@
       margin: 0 auto;
     }
     .msg-row.user { align-items: flex-start; }
-    .msg-row.assistant { align-items: flex-start; }
+    .msg-row.assistant { align-items: flex-start; padding-left: 16px; }
 
     .msg-meta {
       font-size: 11px;
@@ -641,6 +641,8 @@
       border: 1px solid var(--border-subtle);
       width: 100%;
     }
+
+    .msg-meta + .tool-calls-wrap { margin-top: 0; }
 
     /* Markdown inside messages */
     .md-body p { margin-bottom: 8px; }
@@ -3702,10 +3704,8 @@
           return `
             <div class="msg-row assistant">
               <div class="msg-meta"><span>Agent</span><span>${time}</span></div>
-              <div class="msg-bubble">
-                ${m.content ? `<div class="md-body">${renderMarkdown(m.content)}</div>` : ''}
-                ${toolsHtml}
-              </div>
+              ${m.content?.trim() ? `<div class="msg-bubble"><div class="md-body">${renderMarkdown(m.content)}</div></div>` : ''}
+              ${toolsHtml}
             </div>
           `;
         }
@@ -4164,13 +4164,43 @@
 
       // Chat composer: Enter sends, Shift+Enter newline
       const chatInput = $('#chatInput');
+      let historyIndex = -1;
+      let prompts = [];
       chatInput.addEventListener('keydown', (e) => {
+        if (e.isComposing) return;
+        let navigating = false;
+        if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+          if (e.key === 'ArrowUp' && (historyIndex >= 0 || !chatInput.value)) {
+            if (historyIndex < 0) {
+              prompts = state.chat.filter((m) => m.role === 'user' && m.content?.trim())
+                .map((m) => m.content).reverse();
+            }
+            if (!prompts.length) return;
+            navigating = true;
+            historyIndex = Math.min(historyIndex + 1, prompts.length - 1);
+          } else if (e.key === 'ArrowDown' && historyIndex >= 0) {
+            navigating = true;
+            historyIndex--;
+          } else if (e.key === 'Enter') {
+            historyIndex = -1;
+          }
+          if (navigating) {
+            e.preventDefault();
+            chatInput.value = prompts[historyIndex] ?? '';
+            chatInput.style.height = 'auto';
+            chatInput.style.height = Math.min(180, chatInput.scrollHeight) + 'px';
+            chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
+            if (historyIndex < 0) prompts = [];
+            return;
+          }
+        }
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           sendUserMessage();
         }
       });
       chatInput.addEventListener('input', () => {
+        historyIndex = -1;
         chatInput.style.height = 'auto';
         chatInput.style.height = Math.min(180, chatInput.scrollHeight) + 'px';
       });
@@ -4182,7 +4212,8 @@
         }
       });
 
-      $('#btnSend').addEventListener('click', () => sendUserMessage());
+      $('#btnSend').addEventListener('click', () => { historyIndex = -1; sendUserMessage(); });
+      $('#btnNewChat').addEventListener('click', () => { historyIndex = -1; });
       $('#btnStop').addEventListener('click', () => state.abortController?.abort());
       $('#btnAttachChat').addEventListener('click', () => $('#inputAttachChat').click());
       $('#inputAttachChat').addEventListener('change', (e) => {
