@@ -3628,6 +3628,7 @@
           state.chat.push({
             id: uid('msg'),
             role: 'assistant',
+            retryable: true,
             content: `**API-Fehler:** ${err.message}\n\n*Tipp: Prüfe API Key, Base URL und Modell in den Einstellungen.*`,
             tool_calls: [],
             timestamp: Date.now(),
@@ -3971,6 +3972,7 @@
             <div class="msg-row assistant" data-search-message="${escapeHtml(m.id)}">
               <div class="msg-meta"><span>Agent</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
               ${m.content?.trim() ? `<div class="msg-bubble"><div class="md-body">${renderMarkdown(m.content)}</div></div>` : ''}
+              ${m === state.chat.at(-1) && m.retryable ? `<button type="button" class="btn btn-outline btn-sm" data-retry-chat>Erneut versuchen</button>` : ""}
               ${toolsHtml}
             </div>
           `;
@@ -4725,6 +4727,14 @@
         try { sessionStorage.setItem(chatScrollKey, String(e.currentTarget.scrollTop)); } catch {}
       }, { passive: true });
       $('#chatMessages').addEventListener('click', async (e) => {
+        if (e.target.closest('[data-retry-chat]')) {
+          if (state.isRunning || !state.chat.at(-1)?.retryable) return;
+          state.chat.pop();
+          saveChat();
+          renderChat();
+          await runAgentLoop();
+          return;
+        }
         const copy = e.target.closest('[data-copy-message]');
         if (copy) {
           const msg = state.chat.find(m => m.id === copy.dataset.copyMessage);
