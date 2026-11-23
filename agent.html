@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrowserCode — Agentic Coding Workbench</title>  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%23064e3b%22%2F%3E%3Cpath%20fill%3D%22%2310b981%22%20d%3D%22M14%209h36a5%205%200%200%201%205%205v31a5%205%200%200%201-5%205H29L17%2059v-9h-3a5%205%200%200%201-5-5V14a5%205%200%200%201%205-5Z%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20d%3D%22m19%2022%209%208-9%208m15%200h9%22%2F%3E%3Cpath%20fill%3D%22%23d1fae5%22%20d%3D%22m45%2014%202%205%205%202-5%202-2%205-2-5-5-2%205-2Z%22%2F%3E%3C%2Fsvg%3E">
+  <title>MyAiAgent — Agentic Coding Workbench</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%23064e3b%22%2F%3E%3Cpath%20fill%3D%22%2310b981%22%20d%3D%22M14%209h36a5%205%200%200%201%205%205v31a5%205%200%200%201-5%205H29L17%2059v-9h-3a5%205%200%200%201-5-5V14a5%205%200%200%201%205-5Z%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20d%3D%22m19%2022%209%208-9%208m15%200h9%22%2F%3E%3Cpath%20fill%3D%22%23d1fae5%22%20d%3D%22m45%2014%202%205%205%202-5%202-2%205-2-5-5-2%205-2Z%22%2F%3E%3C%2Fsvg%3E">
   <meta name="description" content="Vollständig im Browser laufende Agentic Coding Workbench mit Claude-Code-Tools, Gedächtnis, Workspace, Bildvorschau, GitHub PRs sowie Python-, JavaScript- und Java-Ausführung." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -1259,6 +1260,9 @@
     .preview-fullscreen > [data-preview-download] { left:40px; }
     .preview-fullscreen:fullscreen :is(img,iframe) { height:100% !important; }
     .preview-fullscreen > :is(img,iframe) { display:block; }
+    .preview-fullscreen:has(> img) { width: min(100%, 320px); }
+    .preview-fullscreen > img { width: 100%; height: auto; object-fit: contain; }
+    .preview-fullscreen:fullscreen:has(> img) { width: 100%; }
     .search-results { max-height:200px; overflow:auto; }
     .search-results button { display:block; text-align:left; width:100%; white-space:normal; overflow-wrap:anywhere; }
     .toolbar-search { position: relative; }
@@ -1292,7 +1296,7 @@
         <button class="btn btn-icon" id="btnToggleSidebar" title="Sidebar ein-/ausblenden" aria-label="Sidebar umschalten">☰</button>
         <div class="brand">
           <div class="brand-mark">&gt;_</div>
-          <span>BrowserCode</span>
+          <span>MyAiAgent</span>
         </div>
         <button class="model-pill" id="btnModelPill" title="API & Modell konfigurieren">
           <span class="status-dot" id="statusDot"></span>
@@ -1579,13 +1583,13 @@
 
     const DEFAULT_WORKSPACE = {
       'README.md': {
-        content: '# Willkommen im BrowserCode Workspace\n\nAlle Dateien hier werden lokal im `localStorage` gespeichert.\n\n- Nutze den Chat, um Dateien zu lesen, zu erstellen, zu bearbeiten oder zu durchsuchen.\n- Ziehe Bilder (`png`, `gif`, `svg`, `jpg`, `webp`) oder Code-Dateien per Drag & Drop in den Workspace oder direkt in den Chat.\n- Aktiviere optionale Tools (**GitHub PRs**, **Python**, **JavaScript**, **Java**) oben in der Leiste oder in den Einstellungen.\n',
+        content: '# Willkommen im MyAiAgent Workspace\n\nAlle Dateien hier werden lokal im `localStorage` gespeichert.\n\n- Nutze den Chat, um Dateien zu lesen, zu erstellen, zu bearbeiten oder zu durchsuchen.\n- Ziehe Bilder (`png`, `gif`, `svg`, `jpg`, `webp`) oder Code-Dateien per Drag & Drop in den Workspace oder direkt in den Chat.\n- Aktiviere optionale Tools (**GitHub PRs**, **Python**, **JavaScript**, **Java**) oben in der Leiste oder in den Einstellungen.\n',
         isBinary: false,
         mime: 'text/markdown',
         updatedAt: Date.now(),
       },
       'demo.svg': {
-        content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 140" width="320" height="140">\n  <rect width="320" height="140" rx="14" fill="#17191c"/>\n  <rect x="16" y="16" width="288" height="108" rx="10" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="6 4"/>\n  <circle cx="64" cy="70" r="24" fill="#10b981" opacity="0.2"/>\n  <circle cx="64" cy="70" r="12" fill="#10b981"/>\n  <text x="106" y="64" fill="#eceff2" font-family="monospace" font-size="16" font-weight="bold">BrowserCode</text>\n  <text x="106" y="86" fill="#9aa2ad" font-family="sans-serif" font-size="12">SVG &amp; Bildvorschau aktiv</text>\n</svg>',
+        content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 140" width="320" height="140">\n  <rect width="320" height="140" rx="14" fill="#17191c"/>\n  <rect x="16" y="16" width="288" height="108" rx="10" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="6 4"/>\n  <circle cx="64" cy="70" r="24" fill="#10b981" opacity="0.2"/>\n  <circle cx="64" cy="70" r="12" fill="#10b981"/>\n  <text x="106" y="64" fill="#eceff2" font-family="monospace" font-size="16" font-weight="bold">MyAiAgent</text>\n  <text x="106" y="86" fill="#9aa2ad" font-family="sans-serif" font-size="12">SVG &amp; Bildvorschau aktiv</text>\n</svg>',
         isBinary: false,
         mime: 'image/svg+xml',
         updatedAt: Date.now(),
@@ -3422,7 +3426,7 @@
         .filter(([, v]) => v).map(([k]) => k).join(', ') || 'keine';
 
       return [
-        'Du bist BrowserCode, ein autonomer Coding-Agent, der vollständig im Browser läuft.',
+        'Du bist MyAiAgent, ein autonomer Coding-Agent, der vollständig im Browser läuft.',
         'Du verfügst über alle Standard-Tools (Read, Write, Edit, MultiEdit, LS, Glob, Grep, Delete, Bash, TodoWrite, NotebookEdit, WebFetch) sowie ein dauerhaftes Gedächtnis (MemoryWrite, MemoryRead, MemoryDelete).',
         `Aktivierte optionale Tools: ${optList}.`,
         '',
@@ -3916,6 +3920,9 @@
       const row=(cells,tag)=>'<tr>'+cells.map(v=>'<'+tag+'>'+escapeHtml(v)+'</'+tag+'>').join('')+'</tr>';
       return '<div class="md-body md-table-scroll"><table><thead>'+row(t.headers,'th')+'</thead><tbody>'+t.rows.map(r=>row(r,'td')).join('')+'</tbody></table></div>';
     }
+    function canRetryChat(message) {
+      return Boolean(message?.retryable || message?.tool_calls?.some(call => call.status === 'error'));
+    }
     function renderChat() {
       const container = $('#chatMessages');
       const oldTop = container.scrollTop;
@@ -4007,7 +4014,7 @@
             <div class="msg-row assistant" data-search-message="${escapeHtml(m.id)}">
               <div class="msg-meta"><span>Agent</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
               ${m.content?.trim() ? `<div class="msg-bubble"><div class="md-body">${renderMarkdown(m.content)}</div></div>` : ''}
-              ${m === state.chat.at(-1) && m.retryable ? `<button type="button" class="btn btn-outline btn-sm" data-retry-chat>Erneut versuchen</button>` : ""}
+              ${m === state.chat.at(-1) && canRetryChat(m) ? `<button type="button" class="btn btn-outline btn-sm" data-retry-chat>Erneut versuchen</button>` : ""}
               ${toolsHtml}
             </div>
           `;
@@ -4812,8 +4819,8 @@
       }, { passive: true });
       $('#chatMessages').addEventListener('click', async (e) => {
         if (e.target.closest('[data-retry-chat]')) {
-          if (state.isRunning || runs.has(activeChat) || !state.chat.at(-1)?.retryable) return;
-          state.chat.pop();
+          if (state.isRunning || runs.has(activeChat) || !canRetryChat(state.chat.at(-1))) return;
+          if (state.chat.at(-1).retryable) state.chat.pop();
           saveChat();
           renderChat();
           await runAgentLoop();
