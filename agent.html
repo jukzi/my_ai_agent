@@ -1235,6 +1235,9 @@
         box-shadow: var(--shadow-lg);
       }
     }
+    .model-picker-row { display: flex; gap: 6px; }
+    .model-picker-row > .model-picker { flex: 1; min-width: 0; }
+    .model-picker-row > #btnCheckApi { height: auto; }
     .model-picker { display: flex; position: relative; }
     .model-picker #cfgModel { min-width: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
     .model-picker #btnModels { height: auto; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
@@ -1388,11 +1391,10 @@
           </div>
           <div class="field">
             <label for="cfgModel">Modell (Auswahl oder Freitext)</label>
-                        <button type="button" class="btn btn-outline" id="btnCheckApi">Modelle laden</button>
+            <div class="model-picker-row"><div class="model-picker"><input type="text" id="cfgModel" placeholder="mistralai/mistral-nemo" /><button type="button" class="btn btn-outline" id="btnModels" aria-label="Geladene Modelle anzeigen" aria-expanded="false" aria-controls="cfgModels" disabled>▾</button><div id="cfgModels" hidden></div></div><button type="button" class="btn btn-outline" id="btnCheckApi">Laden</button></div>
+            <span id="apiCheckStatus" class="field-hint" role="status"></span>
             <button type="button" class="btn btn-outline" id="btnCheckApiToken">API-Token prüfen</button>
             <span id="apiTokenStatus" class="field-hint" role="status"></span>
-            <span id="apiCheckStatus" class="field-hint" role="status"></span>
-            <div class="model-picker"><input type="text" id="cfgModel" placeholder="mistralai/mistral-nemo" /><button type="button" class="btn btn-outline" id="btnModels" aria-label="Geladene Modelle anzeigen" aria-expanded="false" aria-controls="cfgModels" disabled>▾</button><div id="cfgModels" hidden></div></div>
           </div>
           <div class="field-row">
             <div class="field">
