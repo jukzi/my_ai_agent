@@ -1274,6 +1274,7 @@
     }
     .agent-steps { width:100%; max-width:860px; margin:0 auto; }
     .agent-steps summary { cursor:pointer; padding-left:16px; color:var(--text-secondary); font-size:12px; }
+    #chatInput { min-height: calc(4.5em + 6px); max-height: calc(4.5em + 6px); overflow-y: auto; }
   </style>
 </head>
 <body>
@@ -1379,7 +1380,7 @@
               <textarea
                 id="chatInput"
                 class="composer-input"
-                rows="1"
+                rows="3"
                 placeholder="Nachricht eingeben… (Enter zum Senden, Shift+Enter für Zeilenumbruch, Bilder einfügen per Strg+V)"
               ></textarea>
               <button class="btn btn-primary" id="btnSend">Senden</button>
