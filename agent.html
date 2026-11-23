@@ -3273,8 +3273,6 @@
       const url = `${baseUrl}/chat/completions`;
       const headers = {
         'Content-Type': 'application/json',
-        'HTTP-Referer': location.href,
-        'X-Title': 'BrowserCode Agent',
       };
       if (state.config.apiKey?.trim()) {
         headers['Authorization'] = `Bearer ${state.config.apiKey.trim()}`;
