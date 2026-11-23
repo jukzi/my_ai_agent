@@ -4414,7 +4414,10 @@
               else if (node.nodeType === Node.ELEMENT_NODE) {
                 if (node.matches('.code-header, script, style, iframe, svg, img')) continue;
                 if (allowed.has(node.tagName)) {
-                  const child = document.createElement(node.tagName.toLowerCase());
+                  // A standalone LI can produce a phantom bullet in rich-text editors.
+                  const tag = node.tagName === 'LI' && !['UL', 'OL'].includes(target.tagName)
+                    ? 'p' : node.tagName.toLowerCase();
+                  const child = document.createElement(tag);
                   appendSafe(node, child);
                   target.append(child);
                 } else appendSafe(node, target);
@@ -4427,7 +4430,7 @@
             if (typeof ClipboardItem === 'function' && navigator.clipboard?.write) {
               await navigator.clipboard.write([new ClipboardItem({
                 'text/plain': new Blob([text], { type: 'text/plain' }),
-                'text/html': new Blob([formatted.innerHTML], { type: 'text/html' }),
+                'text/html': new Blob(['<!doctype html><html><body><!--StartFragment-->' + formatted.outerHTML + '<!--EndFragment--></body></html>'], { type: 'text/html' }),
               })]);
               toast('Nachricht als Text und HTML kopiert.', 'success');
             } else {
