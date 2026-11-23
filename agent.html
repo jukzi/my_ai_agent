@@ -1349,6 +1349,7 @@
       <!-- Center Chat Panel -->
       <main class="chat-panel" id="chatPanel">
         <details style="padding:6px 18px"><summary>Chat &amp; Workspace durchsuchen</summary><input type="search" id="globalSearch" aria-label="Chat und Workspace durchsuchen" placeholder="Suchbegriff…"><div id="searchResults" class="search-results" aria-live="polite"></div></details>
+        <div style="padding:6px 18px"><label>Chat <select id="chatPicker" style="background:var(--bg-panel);color:var(--text-primary);max-width:60%"></select></label> <button class="btn btn-sm" id="renameChat">Umbenennen</button></div>
         <div class="chat-messages" id="chatMessages"></div>
 
         <div class="composer-wrap">
@@ -1754,6 +1755,7 @@
           };
         }
       });
+      loadChats(state.chat);
       localStorage.removeItem(STORAGE_KEYS.WORKSPACE);
       localStorage.removeItem(STORAGE_KEYS.CHAT);
     }
@@ -1764,7 +1766,28 @@
         .catch(() => toast('IndexedDB: Änderungen konnten nicht gespeichert werden. Bitte ein Backup exportieren.', 'error'));
     }
     const saveWorkspace = () => saveLarge(STORAGE_KEYS.WORKSPACE, state.workspace);
-    const saveChat = () => saveLarge(STORAGE_KEYS.CHAT, state.chat);
+    let chats, activeChat;
+    function loadChats(data) {
+      chats = Array.isArray(data?.chats) ? data.chats.filter(c => typeof c?.id === 'string' && typeof c.title === 'string' && Array.isArray(c.messages)) : [];
+      if (!chats.length) chats = [{id:uid('chat'), title:'Bisheriger Chat', messages:Array.isArray(data) ? data : []}];
+      activeChat = chats.find(c => c.id === data?.active) || chats[0];
+      state.chat = activeChat.messages;
+    }
+    const saveChat = () => saveLarge(STORAGE_KEYS.CHAT, {chats, active:activeChat.id});
+    function chatPicker() {
+      const picker = $('#chatPicker');
+      picker.replaceChildren(...chats.map(c => new Option(c.title, c.id)));
+      picker.value = activeChat.id;
+    }
+    function switchChat(chat) {
+      if (!chat || state.isRunning) { chatPicker(); return false; }
+      activeChat = chat;
+      state.chat = chat.messages;
+      saveChat(); chatPicker(); renderChat();
+      $('#chatMessages').scrollTop = $('#chatMessages').scrollHeight;
+      $('#chatInput').dispatchEvent(new Event('input'));
+      return true;
+    }
     const saveMemory = () => saveKey(STORAGE_KEYS.MEMORY, state.memory);
     const saveTodos = () => saveKey(STORAGE_KEYS.TODOS, state.todos);
 
@@ -4180,16 +4203,32 @@
           button.addEventListener('click', action);
           out.append(button);
         };
-        const matches = value => String(value ?? '').toLowerCase().includes(q);
-        for (const m of state.chat) {
-          const hit = matches(m.content) ? m.content : (m.tool_calls || []).find(t => matches(t.result))?.result;
-          if (hit) add((m.role === 'user' ? 'Du: ' : 'Agent: ') + String(hit).slice(0, 160), () => {
-            Array.from($('[data-search-message]')).find(el => el.dataset.searchMessage === m.id)?.scrollIntoView({block:'center'});
+        const excerpt = value => {
+          const text = String(value ?? '');
+          const i = text.toLowerCase().indexOf(q);
+          if (i < 0) return '';
+          const start = Math.max(0, i - 45), end = i + q.length + 65;
+          return (start ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '');
+        };
+        for (const chat of chats) for (const m of chat.messages) {
+          const jump = toolIndex => {
+            if (chat !== activeChat && !switchChat(chat)) return;
+            const row = $$('[data-search-message]').find(el => el.dataset.searchMessage === m.id);
+            const card = toolIndex === undefined ? null : row?.querySelectorAll('.tool-card')[toolIndex];
+            card?.classList.add('open');
+            (card || row)?.scrollIntoView({block:'center'});
+          };
+          const hit = excerpt(m.content);
+          if (hit) add(chat.title + ' · ' + (m.role === 'user' ? 'Du: ' : 'Agent: ') + hit, () => jump());
+          (m.tool_calls || []).forEach((tool, i) => {
+            const result = excerpt(tool.result);
+            if (result) add(chat.title + ' · ' + tool.name + ': ' + result, () => jump(i));
           });
         }
         for (const path of VFS.list()) {
           const f = VFS.get(path);
-          if (matches(path) || (!f.isBinary && matches(f.content))) add('Datei: ' + path, () => openPreview(path));
+          const hit = !f.isBinary && excerpt(f.content);
+          if (excerpt(path) || hit) add('Datei: ' + path + (hit ? ' · ' + hit : ''), () => openPreview(path));
         }
         if (!out.childElementCount) out.textContent = 'Keine Treffer.';
       });
@@ -4205,13 +4244,17 @@
       });
       $('#btnSettings').addEventListener('click', openSettings);
       $('#btnModelPill').addEventListener('click', openSettings);
+      $('#chatPicker').addEventListener('change', e => switchChat(chats.find(c => c.id === e.target.value)));
+      $('#renameChat').addEventListener('click', () => {
+        const title = prompt('Chatname:', activeChat.title)?.trim();
+        if (title) { activeChat.title = title; saveChat(); chatPicker(); }
+      });
       $('#btnNewChat').addEventListener('click', () => {
         if (state.isRunning) return;
-        if (state.chat.length && !confirm('Chatverlauf wirklich leeren? (Workspace & Gedächtnis bleiben erhalten)')) return;
-        state.chat = [];
-        saveChat();
-        renderChat();
-        toast('Neuer Chat gestartet.', 'info');
+        const title = prompt('Name für den neuen Chat:', 'Neuer Chat')?.trim();
+        if (!title) return;
+        const chat = {id:uid('chat'), title, messages:[]};
+        chats.push(chat); switchChat(chat);
       });
 
       // Settings modal
@@ -4339,6 +4382,7 @@
           config: state.config,
           workspace: state.workspace,
           chat: state.chat,
+          chatCollection: {chats, active:activeChat.id},
           memory: state.memory,
           todos: state.todos,
         };
@@ -4359,7 +4403,7 @@
           const data = JSON.parse(await file.text());
           if (data.config) state.config = { ...structuredClone(DEFAULT_CONFIG), ...data.config };
           if (data.workspace) state.workspace = data.workspace;
-          if (data.chat) state.chat = data.chat;
+          if (data.chatCollection || Array.isArray(data.chat)) { loadChats(data.chatCollection || data.chat); chatPicker(); }
           if (data.memory) state.memory = data.memory;
           if (data.todos) state.todos = data.todos;
           saveConfig(); saveWorkspace(); saveChat(); saveMemory(); saveTodos();
@@ -4621,6 +4665,7 @@
       renderTodos();
       renderChat();
       updateStorageMeter();
+      chatPicker();
       bindEvents();
     }
 
