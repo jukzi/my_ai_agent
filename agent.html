@@ -1872,13 +1872,13 @@
             try {
               if (url.value.trim()) {
                 const parsed = new URL(url.value.trim());
-                if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.hash || parsed.search) throw new Error('Bitte eine HTTPS-URL ohne Zugangsdaten oder Fragment eingeben.');
+                if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.hash || parsed.search) throw new Error('Bitte eine HTTP(S)-URL ohne Zugangsdaten, Query oder Fragment eingeben.');
                 values.set(key, parsed.href);
               } else values.delete(key);
               localStorage.setItem(settingsKey + scope, JSON.stringify([...values]));
             } catch (error) { url.value = readToolSettings(scope).get(key) || ''; toast(error.message, 'error'); }
           });
-          target.append('Festes HTTPS-Ziel für ' + field.key, url);
+          target.append('Festes HTTP(S)-Ziel (HTTP ist unverschlüsselt) für ' + field.key, url);
           container.append(target);
         }
       }
@@ -3678,9 +3678,9 @@
           const values = readToolSettings(scope);
           const token = field && values.get(field.key);
           const endpoint = field && values.get('endpoint:' + field.key);
-          if (!token || !endpoint) throw new Error('Credential und festes HTTPS-Ziel müssen konfiguriert sein.');
+          if (!token || !endpoint) throw new Error('Credential und festes HTTP(S)-Ziel müssen konfiguriert sein.');
           const url = new URL(endpoint);
-          if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw new Error('Ungültiges Credential-Ziel.');
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash || url.search) throw new Error('Ungültiges Credential-Ziel.');
           const response = await fetch(url, {method:'GET', credentials:'omit', redirect:'error', referrerPolicy:'no-referrer', signal:AbortSignal.timeout(10000), headers:{Authorization:'Bearer ' + token}});
           // Do not expose responses from authenticated endpoints to generated code or chat.
           await response.body?.cancel();
