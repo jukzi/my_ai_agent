@@ -4444,11 +4444,23 @@
         heading.append(label);
         section.append(heading);
         const toggles = [];
+        function syncGroup() {
+          const count = toggles.filter(({toggle}) => toggle.checked).length;
+          groupToggle.checked = count === toggles.length;
+          groupToggle.indeterminate = count > 0 && count < toggles.length;
+        }
+        function setTool(name, checked) {
+          chat.toolOverrides ??= {};
+          chat.toolOverrides[name] = {...chat.toolOverrides[name], disabled:!checked};
+        }
         groupToggle.addEventListener('change', () => {
-          chat.disabledToolGroups ??= {};
-          chat.disabledToolGroups[group] = !groupToggle.checked;
-          for (const button of section.querySelectorAll('button[aria-expanded="true"]')) button.click();
-          for (const toggle of toggles) toggle.disabled = !groupToggle.checked;
+          const checked = groupToggle.checked;
+          if (chat.disabledToolGroups) delete chat.disabledToolGroups[group];
+          for (const {name, toggle} of toggles) {
+            toggle.checked = checked;
+            setTool(name, checked);
+          }
+          syncGroup();
           saveChat();
         });
         for (const tool of tools) {
@@ -4457,13 +4469,15 @@
           const label = document.createElement('label');
           const toggle = document.createElement('input');
           toggle.type = 'checkbox';
-          toggle.checked = !chat.toolOverrides?.[tool.name]?.disabled;
-          toggle.disabled = !groupToggle.checked;
-          toggles.push(toggle);
+          toggle.checked = !chat.disabledToolGroups?.[group] && !chat.toolOverrides?.[tool.name]?.disabled;
+          toggles.push({name:tool.name, toggle});
           label.append(toggle, ' ' + tool.name);
           toggle.addEventListener('change', () => {
-            chat.toolOverrides ??= {};
-            chat.toolOverrides[tool.name] = {...chat.toolOverrides[tool.name], disabled:!toggle.checked};
+            if (chat.disabledToolGroups?.[group]) {
+              for (const item of toggles) setTool(item.name, item.toggle.checked);
+              delete chat.disabledToolGroups[group];
+            } else setTool(tool.name, toggle.checked);
+            syncGroup();
             saveChat();
           });
           const description = document.createElement('div');
@@ -4485,12 +4499,13 @@
             const source = runtime.executeTool.toString();
             const start = source.indexOf("case '" + tool.name + "':");
             const handler = start < 0 ? 'Kein separater Handler-Quelltext verfügbar.' : source.slice(start).split(/\n\s*(?:case |default:)/)[0].trim();
-            details.textContent = JSON.stringify({...tool, description:effective, group, enabledInGroup:groupToggle.checked, enabledInChat:toggle.checked,
+            details.textContent = JSON.stringify({...tool, description:effective, group, groupState:groupToggle.indeterminate ? 'mixed' : groupToggle.checked ? 'enabled' : 'disabled', enabledInChat:toggle.checked,
               ...(group === 'GitHub' ? {sharedSettings:{repository:state.config.githubRepo || '', tokenConfigured:Boolean(state.config.githubToken)}} : {})}, null, 2) + '\n\nJavaScript (eingebauter Handler, ohne Hilfsfunktionen):\n' + handler;
           });
           row.append(label, description, button, details);
           section.append(row);
         }
+        syncGroup();
         panel.append(section);
       }
     }
