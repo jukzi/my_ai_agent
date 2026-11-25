@@ -3274,20 +3274,8 @@
       return [...builtins, management];
     }
 
-    async function executeTool(name, args) {
-      if (name === 'ConfigureChatTool') {
-        if (!getBuiltinToolDefinitions().some(tool => tool.function.name === args?.name) || typeof args.enabled !== 'boolean') throw new Error('Ungültiges Tool oder ungültige Aktivierung.');
-        chat.toolOverrides ??= {};
-        chat.toolOverrides[args.name] = {...chat.toolOverrides[args.name], disabled:!args.enabled, description:typeof args.description === 'string' ? args.description.trim().slice(0, 2000) : chat.toolOverrides[args.name]?.description || ''};
-        saveChat();
-        return 'Tool-Einstellung für diesen Chat gespeichert.';
-      }
-      if (!getActiveToolDefinitions().some(tool => tool.function.name === name)) {
-        throw new Error('Tool ist für diesen Chat nicht verfügbar: ' + name);
-      }
-      args = args || {};
-      switch (name) {
-        case 'Read': {
+    const toolHandlers = {
+      Read: async (args) => {
           const norm = normalizePath(args.file_path);
           const f = VFS.get(norm);
           if (!f) throw new Error(`Datei nicht gefunden: ${norm}`);
@@ -3299,12 +3287,12 @@
           const limit = Number(args.limit) || lines.length;
           const slice = lines.slice(start - 1, start - 1 + limit);
           return slice.map((l, i) => `${String(start + i).padStart(4)} | ${l}`).join('\n');
-        }
-        case 'Write': {
+      },
+      Write: async (args) => {
           const norm = VFS.write(args.file_path, args.content);
           return `Datei geschrieben: ${norm} (${formatBytes(getFileByteSize(VFS.get(norm)))})`;
-        }
-        case 'Edit': {
+      },
+      Edit: async (args) => {
           const norm = normalizePath(args.file_path);
           const f = VFS.get(norm);
           if (!f) throw new Error(`Datei nicht gefunden: ${norm}`);
@@ -3320,8 +3308,8 @@
           const updated = args.replace_all ? f.content.split(oldStr).join(newStr) : f.content.replace(oldStr, newStr);
           VFS.write(norm, updated, { mime: f.mime, isBinary: false });
           return `Datei bearbeitet: ${norm} (${args.replace_all ? count : 1} Ersetzung(en))`;
-        }
-        case 'MultiEdit': {
+      },
+      MultiEdit: async (args) => {
           const norm = normalizePath(args.file_path);
           const f = VFS.get(norm);
           if (!f) throw new Error(`Datei nicht gefunden: ${norm}`);
@@ -3334,17 +3322,17 @@
           }
           VFS.write(norm, content, { mime: f.mime, isBinary: false });
           return `${(args.edits || []).length} Änderungen auf ${norm} angewendet.`;
-        }
-        case 'LS': {
+      },
+      LS: async (args) => {
           const list = VFS.list(args.path || '');
           if (!list.length) return '(keine Dateien)';
           return list.map((p) => `${p} (${formatBytes(getFileByteSize(VFS.get(p)))})`).join('\n');
-        }
-        case 'Glob': {
+      },
+      Glob: async (args) => {
           const matches = VFS.glob(args.pattern, args.path || '');
           return matches.length ? matches.join('\n') : '(keine Treffer)';
-        }
-        case 'Grep': {
+      },
+      Grep: async (args) => {
           const re = new RegExp(args.pattern, args.case_insensitive ? 'i' : '');
           let files = args.glob ? VFS.glob(args.glob, args.path || '') : VFS.list(args.path || '');
           const mode = args.output_mode || 'content';
@@ -3364,15 +3352,16 @@
             if (matchCount > 0 && mode === 'count') out.push(`${p}: ${matchCount}`);
           }
           return out.length ? out.join('\n') : '(keine Treffer)';
-        }
-        case 'Delete': {
+      },
+      Delete: async (args) => {
           const n = VFS.delete(args.file_path);
           if (!n) throw new Error(`Nicht gefunden: ${args.file_path}`);
           return `Gelöscht: ${n} Datei(en)`;
-        }
-        case 'Bash':
+      },
+      Bash: async (args) => {
           return await runBash(args.command);
-        case 'TodoWrite': {
+      },
+      TodoWrite: async (args) => {
           state.todos = (args.todos || []).map((t, i) => ({
             id: t.id || `t${i + 1}`,
             content: String(t.content || ''),
@@ -3382,8 +3371,8 @@
           saveTodos();
           renderTodos();
           return `Aufgabenliste aktualisiert (${state.todos.length} Einträge).`;
-        }
-        case 'NotebookEdit': {
+      },
+      NotebookEdit: async (args) => {
           const norm = normalizePath(args.notebook_path);
           let nb = { cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 };
           const existing = VFS.get(norm);
@@ -3401,9 +3390,11 @@
           else nb.cells[idx] = cellObj;
           VFS.write(norm, JSON.stringify(nb, null, 2), { mime: 'application/x-ipynb+json' });
           return `Notebook ${norm} aktualisiert (${mode} Zelle ${idx}).`;
-        }
-        case 'JinaReader':
-        case 'WebFetch': {
+      },
+      JinaReader: async (args) => {
+
+      },
+      WebFetch: async (args) => {
           const url = new URL(args.url);
           if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
             throw new Error('Bitte eine HTTP(S)-URL ohne Zugangsdaten angeben.');
@@ -3423,25 +3414,26 @@
             ? text.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
             : text;
           return limit(clean);
-        }
-        case 'ShowImage': {
+      },
+      ShowImage: async (args) => {
           const path = normalizePath(args.file_path);
           const file = VFS.get(path);
           if (!file || !isImageFile(path, file.mime) || !getImageDataUrl(path, file)) {
             throw new Error('Keine darstellbare Bilddatei: ' + path);
           }
           return 'Bild im Chat angezeigt: ' + path;
-        }
-        case 'ShowTable':
+      },
+      ShowTable: async (args) => {
           if (!tablePreview(args)) throw new Error('Ungültige Tabelle: erwartet bis zu 20 Spalten und 200 gleich breite Zeilen aus Textzellen.');
           return 'Tabelle angezeigt';
-        case 'ShowHTML': {
+      },
+      ShowHTML: async (args) => {
           const path = normalizePath(args.file_path);
           const file = VFS.get(path);
           if (!file || file.isBinary || !['html','htm'].includes(getExt(path))) throw new Error('HTML-Datei nicht gefunden: ' + path);
           return 'Interaktive Vorschau: ' + path;
-        }
-        case 'MemoryWrite': {
+      },
+      MemoryWrite: async (args) => {
           const key = String(args.key || '').trim();
           const val = String(args.value || '').trim();
           const existing = state.memory.find((m) => m.key === key);
@@ -3450,8 +3442,8 @@
           saveMemory();
           renderMemory();
           return `Im Gedächtnis gespeichert: "${key}"`;
-        }
-        case 'MemoryRead': {
+      },
+      MemoryRead: async (args) => {
           if (args.key) {
             const m = state.memory.find((x) => x.key === args.key);
             return m ? `${m.key}: ${m.value}` : `(Kein Eintrag für "${args.key}")`;
@@ -3459,38 +3451,58 @@
           return state.memory.length
             ? state.memory.map((m) => `- ${m.key}: ${m.value}`).join('\n')
             : '(Gedächtnis ist leer)';
-        }
-        case 'MemoryDelete': {
+      },
+      MemoryDelete: async (args) => {
           const before = state.memory.length;
           state.memory = state.memory.filter((m) => m.key !== args.key);
           saveMemory();
           renderMemory();
           return state.memory.length < before ? `Gelöscht: "${args.key}"` : `Nicht gefunden: "${args.key}"`;
-        }
-        case 'RunPython':
+      },
+      RunPython: async (args) => {
           if (!state.config.optionalTools.python) throw new Error('Python-Tool ist nicht aktiviert.');
           return await runPython(args.code, args.packages);
-        case 'RunJavaScript':
+      },
+      RunJavaScript: async (args) => {
           if (!state.config.optionalTools.javascript) throw new Error('JavaScript-Tool ist nicht aktiviert.');
           return await runJavaScript(args.code);
-        case 'RunJava':
+      },
+      RunJava: async (args) => {
           if (!state.config.optionalTools.java) throw new Error('Java-Tool ist nicht aktiviert.');
           return await runJava(args.code);
-        case 'GitHub_ReadFile':
+      },
+      GitHub_ReadFile: async (args) => {
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
           return JSON.stringify(await GitHub.readFile(args.repo, args.path, args.ref), null, 2);
-        case 'GitHub_CreateBranch':
+      },
+      GitHub_CreateBranch: async (args) => {
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
           return JSON.stringify(await GitHub.createBranch(args.repo, args.new_branch, args.base_branch), null, 2);
-        case 'GitHub_CommitFile':
+      },
+      GitHub_CommitFile: async (args) => {
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
           return JSON.stringify(await GitHub.commitFile(args.repo, args.branch, args.path, args.content, args.message, args.workspace_path), null, 2);
-        case 'GitHub_CreatePR':
+      },
+      GitHub_CreatePR: async (args) => {
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
           return JSON.stringify(await GitHub.createPullRequest(args.repo, args.title, args.body, args.head, args.base, args.draft), null, 2);
-        default:
-          throw new Error(`Unbekanntes Tool: ${name}`);
+      },
+    };
+
+    async function executeTool(name, args) {
+      if (name === 'ConfigureChatTool') {
+        if (!getBuiltinToolDefinitions().some(tool => tool.function.name === args?.name) || typeof args.enabled !== 'boolean') throw new Error('Ungültiges Tool oder ungültige Aktivierung.');
+        chat.toolOverrides ??= {};
+        chat.toolOverrides[args.name] = {...chat.toolOverrides[args.name], disabled:!args.enabled, description:typeof args.description === 'string' ? args.description.trim().slice(0, 2000) : chat.toolOverrides[args.name]?.description || ''};
+        saveChat();
+        return 'Tool-Einstellung für diesen Chat gespeichert.';
       }
+      if (!getActiveToolDefinitions().some(tool => tool.function.name === name)) {
+        throw new Error('Tool ist für diesen Chat nicht verfügbar: ' + name);
+      }
+      args = args || {};
+      if (!Object.hasOwn(toolHandlers, name)) throw new Error('Unbekanntes Tool: ' + name);
+      return toolHandlers[name](args);
     }
 
     /* =========================================================================
@@ -3566,7 +3578,7 @@
       return msgs;
     }
 
-      return {VFS, GitHub, executeTool, getBuiltinToolDefinitions, getActiveToolDefinitions, buildApiMessages};
+      return {VFS, GitHub, executeTool, toolHandlers, getBuiltinToolDefinitions, getActiveToolDefinitions, buildApiMessages};
     }
     const runtimes = new WeakMap();
     function toolsFor(chat) {
@@ -4507,11 +4519,8 @@
             details.hidden = !details.hidden;
             button.setAttribute('aria-expanded', String(!details.hidden));
             if (details.hidden) return;
-            const source = runtime.executeTool.toString();
-            const start = source.indexOf("case '" + tool.name + "':");
-            const handler = start < 0 ? 'Kein separater Handler-Quelltext verfügbar.' : source.slice(start).split(/\n\s*(?:case |default:)/)[0].trim();
-            details.textContent = JSON.stringify({...tool, description:effective, javascript: start < 0 ? null : handler, group, enabledInChat:toggle.checked,
-              ...(group === 'GitHub' ? {sharedSettings:{repository:state.config.githubRepo || '', tokenConfigured:Boolean(state.config.githubToken)}} : {})}, null, 2);
+            details.textContent = JSON.stringify({...tool, description:effective, javascript: runtime.toolHandlers[tool.name]?.toString() ?? null, group, enabledInChat:toggle.checked,
+              ...(group === 'GitHub' ? {groupSettings:{repository:state.config.githubRepo || '', tokenConfigured:Boolean(state.config.githubToken)}} : {})}, null, 2);
           });
           row.append(label, description, button, details);
           section.append(row);
