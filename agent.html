@@ -1541,6 +1541,7 @@
           </div>
         </div>
       </div>
+      <details style="padding: 12px"><summary>Tools im aktuellen Chat</summary><p>Änderungen werden direkt gespeichert.</p><div id="toolSettingsList"></div></details>
       <div class="modal-foot">
         <button class="btn btn-outline" id="btnCancelSettings">Abbrechen</button>
         <button class="btn btn-primary" id="btnSaveSettings">Speichern</button>
@@ -2842,7 +2843,7 @@
     /* =========================================================================
        7. CLAUDE CODE STANDARD TOOLS + OPTIONAL TOOLS REGISTRY
        ========================================================================= */
-    function getActiveToolDefinitions() {
+    function getBuiltinToolDefinitions() {
       const tools = [
         {
           type: 'function',
@@ -3239,7 +3240,27 @@
       return tools;
     }
 
+    function getActiveToolDefinitions() {
+      const overrides = chat.toolOverrides || {};
+      const management = {type: 'function', function: {name: 'ConfigureChatTool', description: 'Ändert Beschreibung oder Aktivierung eines vorhandenen Tools nur in diesem Chat.', parameters: {type: 'object', properties: {name:{type:'string'}, enabled:{type:'boolean'}, description:{type:'string'}}, required:['name','enabled']}}};
+      const builtins = getBuiltinToolDefinitions().filter(tool => !overrides[tool.function.name]?.disabled).map(tool => {
+        const description = overrides[tool.function.name]?.description;
+        return description ? {...tool, function:{...tool.function, description}} : tool;
+      });
+      return [...builtins, management];
+    }
+
     async function executeTool(name, args) {
+      if (name === 'ConfigureChatTool') {
+        if (!getBuiltinToolDefinitions().some(tool => tool.function.name === args?.name) || typeof args.enabled !== 'boolean') throw new Error('Ungültiges Tool oder ungültige Aktivierung.');
+        chat.toolOverrides ??= {};
+        chat.toolOverrides[args.name] = {disabled:!args.enabled, description:typeof args.description === 'string' ? args.description.trim().slice(0, 2000) : chat.toolOverrides[args.name]?.description || ''};
+        saveChat();
+        return 'Tool-Einstellung für diesen Chat gespeichert.';
+      }
+      if (!getActiveToolDefinitions().some(tool => tool.function.name === name)) {
+        throw new Error('Tool ist für diesen Chat nicht verfügbar: ' + name);
+      }
       args = args || {};
       switch (name) {
         case 'Read': {
@@ -3521,7 +3542,7 @@
       return msgs;
     }
 
-      return {VFS, GitHub, executeTool, getActiveToolDefinitions, buildApiMessages};
+      return {VFS, GitHub, executeTool, getBuiltinToolDefinitions, getActiveToolDefinitions, buildApiMessages};
     }
     const runtimes = new WeakMap();
     function toolsFor(chat) {
@@ -4380,7 +4401,42 @@
       $('#cfgInputRate').value = rates?.inputRate ?? '';
       $('#cfgOutputRate').value = rates?.outputRate ?? '';
     }
+    function renderToolSettings() {
+      const chat = activeChat;
+      const panel = $('#toolSettingsList');
+      panel.replaceChildren();
+      for (const {function: tool} of toolsFor(chat).getBuiltinToolDefinitions()) {
+        const row = document.createElement('div');
+        const label = document.createElement('label');
+        const enabled = document.createElement('input');
+        enabled.type = 'checkbox';
+        enabled.checked = !chat.toolOverrides?.[tool.name]?.disabled;
+        label.append(enabled, ' ' + tool.name);
+        const description = document.createElement('input');
+        description.type = 'text';
+        description.placeholder = tool.description;
+        description.setAttribute('aria-label', 'Beschreibung für ' + tool.name);
+        description.value = chat.toolOverrides?.[tool.name]?.description || '';
+        function update() {
+          chat.toolOverrides ??= {};
+          if (enabled.checked && !description.value.trim()) delete chat.toolOverrides[tool.name];
+          else chat.toolOverrides[tool.name] = {disabled:!enabled.checked, description:description.value.trim()};
+          saveChat();
+        }
+        enabled.addEventListener('change', update);
+        description.addEventListener('change', update);
+        const reset = document.createElement('button');
+        reset.type = 'button';
+        reset.className = 'btn btn-sm';
+        reset.textContent = 'Standard';
+        reset.addEventListener('click', () => { enabled.checked = true; description.value = ''; update(); });
+        row.append(label, description, reset);
+        panel.append(row);
+      }
+    }
+
     function openSettings() {
+      renderToolSettings();
       $('#cfgBaseUrl').value = state.config.baseUrl;
       $('#cfgApiKey').value = state.config.apiKey;
       $('#cfgModel').value = state.config.model;
