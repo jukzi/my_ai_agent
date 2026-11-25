@@ -2587,36 +2587,32 @@
     }
 
     async function runJavaScript(code) {
-      const logs = [];
-      const fmt = (v) => {
-        if (typeof v === 'string') return v;
-        try { return JSON.stringify(v, null, 2); } catch { return String(v); }
-      };
-      const sandboxConsole = {
-        log: (...a) => logs.push(a.map(fmt).join(' ')),
-        info: (...a) => logs.push(a.map(fmt).join(' ')),
-        warn: (...a) => logs.push('[warn] ' + a.map(fmt).join(' ')),
-        error: (...a) => logs.push('[error] ' + a.map(fmt).join(' ')),
-      };
-      const workspaceApi = {
-        list: (p = '') => VFS.list(p),
-        read: (p) => VFS.get(p)?.content ?? null,
-        write: (p, content) => VFS.write(p, String(content)),
-        delete: (p) => VFS.delete(p),
-      };
-
-      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-      const fn = new AsyncFunction('console', 'workspace', `"use strict";\n${code}`);
-      const res = await Promise.race([
-        fn(sandboxConsole, workspaceApi),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('JavaScript Timeout nach 10s')), 10000)),
-      ]);
-
-      const out = logs.join('\n');
-      if (res !== undefined) {
-        return out ? `${out}\n=> ${fmt(res)}` : fmt(res);
+      const files = Object.fromEntries((getActiveToolDefinitions().some(t => t.function.name === 'Read') ? VFS.list() : []).map(path => [path, VFS.get(path).content]));
+      const tool = {name:'RunJavaScript', javascript: `async (args) => {
+        const files = new Map(Object.entries(args.files));
+        const logs = [], changes = [];
+        const console = Object.fromEntries(['log','info','warn','error'].map(level => [level, (...parts) => logs.push(parts.map(v => typeof v === 'string' ? v : JSON.stringify(v)).join(' '))]));
+        const workspace = {
+          list: (prefix = '') => [...files.keys()].filter(path => !prefix || path === prefix || path.startsWith(prefix + '/')),
+          read: path => files.get(path) ?? null,
+          write: (path, content) => { files.set(path, String(content)); changes.push({path, content:String(content)}); return path; },
+          delete: path => { const matches = [...files.keys()].filter(key => key === path || key.startsWith(path + '/')); for (const key of matches) files.delete(key); changes.push({path}); return matches.length; },
+        };
+        const value = await (async () => {\n${code}\n})();
+        return {logs, changes, value};
+      }`};
+      const result = JSON.parse(await runCustom(tool, {files}, ''));
+      if (!Array.isArray(result?.changes) || result.changes.length > 100) throw new Error('Ungültige Workspace-Änderungen.');
+      const enabled = new Set(getActiveToolDefinitions().map(tool => tool.function.name));
+      for (const change of result.changes) {
+        if (!change || typeof change.path !== 'string' || !change.path || change.path !== normalizePath(change.path) || change.path.split('/').some(part => ['__proto__','constructor','prototype'].includes(part)) ||
+            (Object.hasOwn(change,'content') ? typeof change.content !== 'string' || !enabled.has('Write') : !enabled.has('Delete'))) throw new Error('Workspace-Änderung nicht erlaubt.');
       }
-      return out || '(Ausführung ohne Ausgabe abgeschlossen)';
+      for (const change of result.changes) {
+        if (Object.hasOwn(change,'content')) VFS.write(change.path, change.content);
+        else VFS.delete(change.path);
+      }
+      return [...(Array.isArray(result.logs) ? result.logs : []), ...(result.value === undefined ? [] : [typeof result.value === 'string' ? result.value : JSON.stringify(result.value)])].join('\n') || '(Ausführung ohne Ausgabe abgeschlossen)';
     }
 
     // In-Browser Java Transpiler & Standard Library Runtime
@@ -5178,7 +5174,7 @@
         const dump = {
           version: 1,
           exportedAt: new Date().toISOString(),
-          config: state.config,
+          config: Object.fromEntries(Object.entries(state.config).filter(([key]) => !['apiKey','githubToken'].includes(key))),
           workspace: state.workspace,
           chat: state.chat,
           chatCollection: {chats, active:activeChat.id},
@@ -5200,8 +5196,11 @@
         if (!file) return;
         try {
           const data = JSON.parse(await file.text());
-          if (data.config) state.config = { ...structuredClone(DEFAULT_CONFIG), ...data.config };
           if (state.isRunning || runs.size) throw new Error("Bitte zuerst den Agenten stoppen.");
+          if (data.config) {
+            const {apiKey, githubToken} = state.config;
+            state.config = {...structuredClone(DEFAULT_CONFIG), ...data.config, apiKey, githubToken};
+          }
           closePreview();
           if (data.chatCollection || Array.isArray(data.chat)) { loadChats(data.chatCollection || data.chat, data.workspace || {}); chatPicker(); }
           else if (data.workspace) state.workspace = activeChat.workspace = data.workspace;
