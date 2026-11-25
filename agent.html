@@ -1121,6 +1121,21 @@
       font-size: 13px;
       outline: none;
     }
+    .tool-settings-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-strong);
+    }
+    .tool-settings-row > label { overflow-wrap: anywhere; }
+    .tool-settings-row input[type="text"] { box-sizing: border-box; }
+    @media (max-width: 560px) {
+      .tool-settings-row { grid-template-columns: minmax(0, 1fr) auto; }
+      .tool-settings-row > div { grid-column: 1 / -1; grid-row: 2; }
+      .tool-settings-row > button { grid-column: 2; grid-row: 1; }
+    }
     .field input:focus, .field textarea:focus {
       border-color: var(--accent);
     }
@@ -1540,8 +1555,8 @@
             <button class="btn btn-danger btn-sm" id="btnResetAll">Alles zurücksetzen</button>
           </div>
         </div>
-      </div>
       <details style="padding: 12px"><summary>Tools im aktuellen Chat</summary><p>Änderungen werden direkt gespeichert.</p><div id="toolSettingsList"></div></details>
+      </div>
       <div class="modal-foot">
         <button class="btn btn-outline" id="btnCancelSettings">Abbrechen</button>
         <button class="btn btn-primary" id="btnSaveSettings">Speichern</button>
@@ -3254,7 +3269,7 @@
       if (name === 'ConfigureChatTool') {
         if (!getBuiltinToolDefinitions().some(tool => tool.function.name === args?.name) || typeof args.enabled !== 'boolean') throw new Error('Ungültiges Tool oder ungültige Aktivierung.');
         chat.toolOverrides ??= {};
-        chat.toolOverrides[args.name] = {disabled:!args.enabled, description:typeof args.description === 'string' ? args.description.trim().slice(0, 2000) : chat.toolOverrides[args.name]?.description || ''};
+        chat.toolOverrides[args.name] = {...chat.toolOverrides[args.name], disabled:!args.enabled, description:typeof args.description === 'string' ? args.description.trim().slice(0, 2000) : chat.toolOverrides[args.name]?.description || ''};
         saveChat();
         return 'Tool-Einstellung für diesen Chat gespeichert.';
       }
@@ -3454,16 +3469,16 @@
           return await runJava(args.code);
         case 'GitHub_ReadFile':
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
-          return JSON.stringify(await GitHub.readFile(args.repo, args.path, args.ref), null, 2);
+          return JSON.stringify(await GitHub.readFile(args.repo || chat.toolOverrides?.[name]?.config?.repo, args.path, args.ref), null, 2);
         case 'GitHub_CreateBranch':
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
-          return JSON.stringify(await GitHub.createBranch(args.repo, args.new_branch, args.base_branch), null, 2);
+          return JSON.stringify(await GitHub.createBranch(args.repo || chat.toolOverrides?.[name]?.config?.repo, args.new_branch, args.base_branch), null, 2);
         case 'GitHub_CommitFile':
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
-          return JSON.stringify(await GitHub.commitFile(args.repo, args.branch, args.path, args.content, args.message, args.workspace_path), null, 2);
+          return JSON.stringify(await GitHub.commitFile(args.repo || chat.toolOverrides?.[name]?.config?.repo, args.branch, args.path, args.content, args.message, args.workspace_path), null, 2);
         case 'GitHub_CreatePR':
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
-          return JSON.stringify(await GitHub.createPullRequest(args.repo, args.title, args.body, args.head, args.base, args.draft), null, 2);
+          return JSON.stringify(await GitHub.createPullRequest(args.repo || chat.toolOverrides?.[name]?.config?.repo, args.title, args.body, args.head, args.base, args.draft), null, 2);
         default:
           throw new Error(`Unbekanntes Tool: ${name}`);
       }
@@ -4401,36 +4416,50 @@
       $('#cfgInputRate').value = rates?.inputRate ?? '';
       $('#cfgOutputRate').value = rates?.outputRate ?? '';
     }
+    // Configuration fields are independent of the model's per-call arguments.
+    const toolConfigFields = name => name.startsWith('GitHub_') ? [{key:'repo', label:'Standard-Repository', credential:false}] : [];
     function renderToolSettings() {
       const chat = activeChat;
       const panel = $('#toolSettingsList');
       panel.replaceChildren();
       for (const {function: tool} of toolsFor(chat).getBuiltinToolDefinitions()) {
         const row = document.createElement('div');
+        row.className = 'tool-settings-row';
         const label = document.createElement('label');
         const enabled = document.createElement('input');
         enabled.type = 'checkbox';
         enabled.checked = !chat.toolOverrides?.[tool.name]?.disabled;
         label.append(enabled, ' ' + tool.name);
-        const description = document.createElement('input');
-        description.type = 'text';
-        description.placeholder = tool.description;
-        description.setAttribute('aria-label', 'Beschreibung für ' + tool.name);
-        description.value = chat.toolOverrides?.[tool.name]?.description || '';
+        const fields = document.createElement('div');
+        const inputs = toolConfigFields(tool.name).map(field => {
+          const fieldLabel = document.createElement('label');
+          fieldLabel.className = 'field';
+          const input = document.createElement('input');
+          input.type = field.credential ? 'password' : 'text';
+          input.value = chat.toolOverrides?.[tool.name]?.config?.[field.key] || '';
+          fieldLabel.append(field.label, input);
+          fields.append(fieldLabel);
+          return [field.key, input];
+        });
         function update() {
           chat.toolOverrides ??= {};
-          if (enabled.checked && !description.value.trim()) delete chat.toolOverrides[tool.name];
-          else chat.toolOverrides[tool.name] = {disabled:!enabled.checked, description:description.value.trim()};
+          const previous = chat.toolOverrides[tool.name] || {};
+          chat.toolOverrides[tool.name] = {...previous, disabled:!enabled.checked,
+            config:Object.fromEntries(inputs.map(([key, input]) => [key, input.value.trim()]))};
           saveChat();
         }
         enabled.addEventListener('change', update);
-        description.addEventListener('change', update);
+        for (const [, input] of inputs) input.addEventListener('change', update);
         const reset = document.createElement('button');
         reset.type = 'button';
         reset.className = 'btn btn-sm';
         reset.textContent = 'Standard';
-        reset.addEventListener('click', () => { enabled.checked = true; description.value = ''; update(); });
-        row.append(label, description, reset);
+        reset.addEventListener('click', () => {
+          if (chat.toolOverrides) delete chat.toolOverrides[tool.name];
+          saveChat();
+          renderToolSettings();
+        });
+        row.append(label, fields, reset);
         panel.append(row);
       }
     }
