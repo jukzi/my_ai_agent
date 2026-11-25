@@ -3333,10 +3333,31 @@
         return description ? {...tool, function:{...tool.function, description}} : tool;
       });
       const custom = getCustomDefinitions().filter(tool => chat.customEnabled?.[tool.function.name] === true);
-      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete']},name:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
+      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'getConfig liest normale Werte und den Status von Credentials. setConfig setzt einen Wert mit field und value; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig']},name:{type:'string'},field:{type:'string'},value:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
       return [...builtins, ...custom, management, ...(state.config.optionalTools.javascript ? [manage] : [])];
     }
 
+    async function fetchToolPage(args, viaJina) {
+          const url = new URL(args.url);
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+            throw new Error('Bitte eine HTTP(S)-URL ohne Zugangsdaten angeben.');
+          }
+          url.hash = '';
+          const options = () => ({ credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
+          const limit = text => text.slice(0, 12000) + (text.length > 12000 ? '\n… [gekürzt]' : '');
+          if (viaJina) {
+            const reader = await fetch('https://r.jina.ai/' + url.href, { ...options(), redirect: 'error' });
+            if (!reader.ok) throw Object.assign(new Error('Jina Reader: HTTP ' + reader.status), {status:reader.status});
+            return 'Quelle: Jina Reader (externer Abruf)\n' + limit(await reader.text());
+          }
+          const response = await fetch(url.href, options());
+          if (!response.ok) throw Object.assign(new Error('WebFetch: HTTP ' + response.status), {status:response.status});
+          const text = await response.text();
+          const clean = /text\/html/i.test(response.headers.get('content-type') || '')
+            ? text.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+            : text;
+          return limit(clean);
+    }
     const toolHandlers = {
       Read: async (args) => {
           const norm = normalizePath(args.file_path);
@@ -3454,30 +3475,8 @@
           VFS.write(norm, JSON.stringify(nb, null, 2), { mime: 'application/x-ipynb+json' });
           return `Notebook ${norm} aktualisiert (${mode} Zelle ${idx}).`;
       },
-      JinaReader: async (args) => {
-
-      },
-      WebFetch: async (args) => {
-          const url = new URL(args.url);
-          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
-            throw new Error('Bitte eine HTTP(S)-URL ohne Zugangsdaten angeben.');
-          }
-          url.hash = '';
-          const options = () => ({ credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
-          const limit = text => text.slice(0, 12000) + (text.length > 12000 ? '\n… [gekürzt]' : '');
-          if (name === 'JinaReader') {
-            const reader = await fetch('https://r.jina.ai/' + url.href, { ...options(), redirect: 'error' });
-            if (!reader.ok) throw Object.assign(new Error('Jina Reader: HTTP ' + reader.status), {status:reader.status});
-            return 'Quelle: Jina Reader (externer Abruf)\n' + limit(await reader.text());
-          }
-          const response = await fetch(url.href, options());
-          if (!response.ok) throw Object.assign(new Error('WebFetch: HTTP ' + response.status), {status:response.status});
-          const text = await response.text();
-          const clean = /text\/html/i.test(response.headers.get('content-type') || '')
-            ? text.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-            : text;
-          return limit(clean);
-      },
+      JinaReader: async (args) => fetchToolPage(args, true),
+      WebFetch: async (args) => fetchToolPage(args, false),
       ShowImage: async (args) => {
           const path = normalizePath(args.file_path);
           const file = VFS.get(path);
@@ -3566,6 +3565,17 @@
       args = args || {};
       if (name === 'ManageJavaScriptTool') {
         const {action,name:key,description,javascript,fields = []} = args;
+        if (action === 'getConfig' || action === 'setConfig') {
+          const tool = customTools.get(key);
+          if (!tool || !getActiveToolDefinitions().some(t => t.function.name === key)) throw new Error('Tool ist in diesem Chat nicht aktiv.');
+          const values = readToolSettings(key);
+          if (action === 'getConfig') return JSON.stringify(Object.fromEntries((tool.fields || []).map(field => [field.key,field.credential ? {configured:values.has(field.key)} : values.get(field.key) ?? ''])));
+          const field = (tool.fields || []).find(field => field.key === args.field);
+          if (!field || typeof args.value !== 'string' || args.value.length > 10000) throw new Error('Ungültiger Konfigurationswert.');
+          if (args.value) values.set(field.key,args.value); else values.delete(field.key);
+          localStorage.setItem(settingsKey + key,JSON.stringify([...values]));
+          return 'Konfiguration gespeichert.';
+        }
         if (!Array.isArray(fields) || fields.length > 30 || fields.some(field => !field || typeof field.key !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(field.key) || typeof field.credential !== 'boolean') || new Set(fields.map(field => field.key)).size !== fields.length) throw new Error('Ungültige Konfigurationsfelder.');
         const builtin = typeof key === 'string' && Object.hasOwn(toolHandlers,key);
         if (typeof key !== 'string' || (!builtin && !/^Custom_[A-Za-z0-9_]{1,50}$/.test(key))) throw new Error('Ungültiger Toolname.');
@@ -3891,7 +3901,7 @@
             const t0 = performance.now();
             try {
               const execute = () => executeTool(tc.name, tc.args);
-              const out = await (readOnly.has(tc.name) ? retry(execute, tc.name) : execute());
+              const out = await (readOnly.has(tc.name) && !customTools.has(tc.name) ? retry(execute, tc.name) : execute());
               tc.status = 'ok';
               tc.result = String(out ?? '');
             } catch (err) {
