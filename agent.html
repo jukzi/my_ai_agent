@@ -1284,7 +1284,7 @@
     .preview-fullscreen > img { width: 100%; height: auto; object-fit: contain; }
     .preview-fullscreen:fullscreen:has(> img) { width: 100%; }
     .search-results { max-height:200px; overflow:auto; }
-    .search-results button { display:block; text-align:left; width:100%; white-space:normal; overflow-wrap:anywhere; }
+    .search-results button { display:block; height:auto; min-height:32px; padding:6px 11px; line-height:1.4; text-align:left; width:100%; white-space:normal; overflow-wrap:anywhere; }
     .toolbar-search { position: relative; }
     #globalSearch, #chatPicker { background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 4px 6px; }
     #globalSearch { width: clamp(80px, 13vw, 180px); }
@@ -4953,6 +4953,9 @@
           button.setAttribute('aria-label', label);
           button.innerHTML = active ? "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M3 9h6V3m12 6h-6V3M9 21v-6H3m12 6v-6h6\"/></svg>" : "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6\"/></svg>";
         }
+      });
+      document.addEventListener('click', event => {
+        if (!event.target.closest('.toolbar-search')) $('#searchResults').replaceChildren();
       });
       $('#globalSearch').addEventListener('input', () => {
         const q = $('#globalSearch').value.trim().toLowerCase();
