@@ -1147,6 +1147,8 @@
       grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
+    .field-error { color: var(--danger); font-size: 12px; }
+    .field input[aria-invalid="true"] { border-color: var(--danger); }
     .field-hint {
       font-size: 11.5px;
       color: var(--text-muted);
@@ -1843,6 +1845,18 @@
       try { return new Map(JSON.parse(localStorage.getItem(settingsKey + scope) || '[]')); }
       catch { return new Map(); }
     }
+    const urlHelp = 'Bitte eine HTTP(S)-URL ohne Zugangsdaten, Query oder Fragment eingeben.';
+    function bindFieldError(input, error) {
+      error.id = uid('field-error');
+      error.className = 'field-error';
+      error.setAttribute('aria-live', 'polite');
+      input.setAttribute('aria-describedby', error.id);
+      input.addEventListener('input', () => showFieldError(input, error, ''));
+    }
+    function showFieldError(input, error, message) {
+      error.textContent = message;
+      input.setAttribute('aria-invalid', message ? 'true' : 'false');
+    }
     function renderCustomFields(scope, fields, container) {
       for (const field of fields || []) {
         const label = document.createElement('label');
@@ -1851,34 +1865,39 @@
         input.type = field.credential ? 'password' : 'text';
         input.autocomplete = 'off';
         input.value = field.credential ? '' : readToolSettings(scope).get(field.key) || '';
-        if (field.credential && readToolSettings(scope).has(field.key)) input.placeholder = 'Gesetzt';
+        if (field.credential && readToolSettings(scope).has(field.key)) input.placeholder = '****';
+        const inputError = document.createElement('span');
+        bindFieldError(input, inputError);
         input.addEventListener('change', () => {
           const values = readToolSettings(scope);
           if (input.value) values.set(field.key,input.value); else values.delete(field.key);
           try { localStorage.setItem(settingsKey + scope, JSON.stringify([...values])); }
-          catch (error) { toast(error.message,'error'); }
-          if (field.credential) { input.value = ''; input.placeholder = readToolSettings(scope).has(field.key) ? 'Gesetzt' : ''; }
+          catch (error) { showFieldError(input, inputError, error.message); return; }
+          if (field.credential) { input.value = ''; input.placeholder = readToolSettings(scope).has(field.key) ? '****' : ''; }
         });
-        label.append(field.key,input); container.append(label);
+        label.append(field.key,input,inputError); container.append(label);
         if (field.credential) {
           const target = document.createElement('label');
           target.className = 'field';
           const url = document.createElement('input');
           url.type = 'text';
+          const urlError = document.createElement('span');
+          bindFieldError(url, urlError);
           const key = 'endpoint:' + field.key;
           url.value = readToolSettings(scope).get(key) || '';
           url.addEventListener('change', () => {
             const values = readToolSettings(scope);
             try {
               if (url.value.trim()) {
-                const parsed = new URL(url.value.trim());
-                if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.hash || parsed.search) throw new Error('Bitte eine HTTP(S)-URL ohne Zugangsdaten, Query oder Fragment eingeben.');
+                let parsed;
+                 try { parsed = new URL(url.value.trim()); } catch { throw new Error(urlHelp); }
+                if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.hash || parsed.search) throw new Error(urlHelp);
                 values.set(key, parsed.href);
               } else values.delete(key);
               localStorage.setItem(settingsKey + scope, JSON.stringify([...values]));
-            } catch (error) { url.value = readToolSettings(scope).get(key) || ''; toast(error.message, 'error'); }
+            } catch (error) { showFieldError(url, urlError, error.message); }
           });
-          target.append('Festes HTTP(S)-Ziel (HTTP ist unverschlüsselt) für ' + field.key, url);
+          target.append('Festes HTTP(S)-Ziel (HTTP ist unverschlüsselt) für ' + field.key, url, urlError);
           container.append(target);
         }
       }
