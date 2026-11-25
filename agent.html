@@ -1843,6 +1843,30 @@
     const customKey = 'myaiagent_custom_tools_v1';
     let customTools = new Map();
     try { customTools = new Map(JSON.parse(localStorage.getItem(customKey) || '[]')); } catch {}
+    const settingsKey = 'myaiagent_tool_settings_v1';
+    function readToolSettings(scope) {
+      try { return new Map(JSON.parse(localStorage.getItem(settingsKey + scope) || '[]')); }
+      catch { return new Map(); }
+    }
+    function renderCustomFields(scope, fields, container) {
+      for (const field of fields || []) {
+        const label = document.createElement('label');
+        label.className = 'field';
+        const input = document.createElement('input');
+        input.type = field.credential ? 'password' : 'text';
+        input.autocomplete = 'off';
+        input.value = field.credential ? '' : readToolSettings(scope).get(field.key) || '';
+        if (field.credential && readToolSettings(scope).has(field.key)) input.placeholder = 'Gesetzt';
+        input.addEventListener('change', () => {
+          const values = readToolSettings(scope);
+          if (input.value) values.set(field.key,input.value); else values.delete(field.key);
+          try { localStorage.setItem(settingsKey + scope, JSON.stringify([...values])); }
+          catch (error) { toast(error.message,'error'); }
+          if (field.credential) { input.value = ''; input.placeholder = readToolSettings(scope).has(field.key) ? 'Gesetzt' : ''; }
+        });
+        label.append(field.key,input); container.append(label);
+      }
+    }
     function runCustom(tool, args, text) {
       return new Promise((resolve, reject) => {
         const frame = document.createElement('iframe');
@@ -1852,7 +1876,7 @@
           addEventListener('message', ({source,data}) => {
             if (source !== parent) return;
             try {
-              const script = 'onmessage=async ({data})=>{try{const fn=(' + data.code + ');postMessage({result:JSON.stringify(await fn(data.args,{text:data.text}))});}catch(e){postMessage({error:String(e)});}}';
+              const script = 'onmessage=async ({data})=>{try{const fn=(' + data.code + ');postMessage({result:JSON.stringify(await fn(data.args,{text:data.text,config:data.config}))});}catch(e){postMessage({error:String(e)});}}';
               const worker = new Worker(URL.createObjectURL(new Blob([script],{type:'text/javascript'})));
               worker.onmessage = event => { worker.terminate(); parent.postMessage(event.data,'*'); };
               worker.onerror = () => { worker.terminate(); parent.postMessage({error:'Ungültiger JavaScript-Code'},'*'); };
@@ -1869,7 +1893,7 @@
         };
         const timer = setTimeout(() => { finish(); reject(new Error('JavaScript-Tool: Zeitlimit erreicht')); }, 5000);
         addEventListener('message', receive);
-        frame.onload = () => frame.contentWindow.postMessage({code:tool.javascript,args,text},'*');
+        frame.onload = () => frame.contentWindow.postMessage({code:tool.javascript,args,text,config:Object.fromEntries((tool.fields || []).filter(field => !field.credential).map(field => [field.key,readToolSettings(tool.name).get(field.key) || ""]))},'*');
         frame.srcdoc = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:"><script>(${boot.toString()})()<${'/script>'}`;
         document.body.append(frame);
       });
@@ -3299,7 +3323,7 @@
     }
 
     function getCustomDefinitions() {
-      return state.config.optionalTools.javascript ? [...customTools.values()].map(({javascript,...definition}) => ({type:'function',function:definition})) : [];
+      return state.config.optionalTools.javascript ? [...customTools.values()].filter(tool => tool.name.startsWith('Custom_')).map(({javascript,fields,...definition}) => ({type:'function',function:definition})) : [];
     }
     function getActiveToolDefinitions() {
       const overrides = chat.toolOverrides || {};
@@ -3309,7 +3333,7 @@
         return description ? {...tool, function:{...tool.function, description}} : tool;
       });
       const custom = getCustomDefinitions().filter(tool => chat.customEnabled?.[tool.function.name] === true);
-      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'Speichert oder löscht ein eigenes Tool. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete']},name:{type:'string'},description:{type:'string'},javascript:{type:'string'}},required:['action','name']}}};
+      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete']},name:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
       return [...builtins, ...custom, management, ...(state.config.optionalTools.javascript ? [manage] : [])];
     }
 
@@ -3541,13 +3565,20 @@
       }
       args = args || {};
       if (name === 'ManageJavaScriptTool') {
-        const {action,name:key,description,javascript} = args;
-        if (typeof key !== 'string' || !/^Custom_[A-Za-z0-9_]{1,50}$/.test(key)) throw new Error('Name muss mit Custom_ beginnen.');
+        const {action,name:key,description,javascript,fields = []} = args;
+        if (!Array.isArray(fields) || fields.length > 30 || fields.some(field => !field || typeof field.key !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(field.key) || typeof field.credential !== 'boolean') || new Set(fields.map(field => field.key)).size !== fields.length) throw new Error('Ungültige Konfigurationsfelder.');
+        const builtin = typeof key === 'string' && Object.hasOwn(toolHandlers,key);
+        if (typeof key !== 'string' || (!builtin && !/^Custom_[A-Za-z0-9_]{1,50}$/.test(key))) throw new Error('Ungültiger Toolname.');
+        if (builtin && !getBuiltinToolDefinitions().some(t => t.function.name === key)) throw new Error('Standardtool ist global deaktiviert.');
         const next = new Map(customTools);
-        const isNew = !next.has(key);
-        if (action === 'delete') next.delete(key);
+        const isNew = !next.has(key) && !builtin;
+        if (action === 'delete') { next.delete(key); localStorage.removeItem(settingsKey + key); }
         else if (action === 'save' && typeof description === 'string' && typeof javascript === 'string' && javascript.length <= 20000) {
-          next.set(key,{name:key,description:description.slice(0,2000),javascript,parameters:{type:'object',properties:{file_path:{type:'string'},input:{type:'string'}}}});
+          const previous = next.get(key)?.fields || [];
+          const values = readToolSettings(key);
+          for (const field of previous) if (!fields.some(item => item.key === field.key && item.credential === field.credential)) values.delete(field.key);
+          localStorage.setItem(settingsKey + key, JSON.stringify([...values]));
+          next.set(key,{name:key,fields,description:description.slice(0,2000),javascript,parameters:{type:'object',properties:{file_path:{type:'string'},input:{type:'string'}}}});
         } else throw new Error('Ungültige Tool-Definition');
         localStorage.setItem(customKey,JSON.stringify([...next]));
         customTools = next;
@@ -3556,10 +3587,21 @@
         saveChat();
         return 'Tool-Bibliothek aktualisiert.';
       }
-      if (customTools.has(name)) {
+      if (state.config.optionalTools.javascript && customTools.has(name)) {
         const file = args.file_path ? VFS.get(normalizePath(args.file_path)) : null;
         if (args.file_path && (!file || file.isBinary || file.content.length > 500000)) throw new Error('Textdatei fehlt oder ist zu groß.');
-        return runCustom(customTools.get(name),args,file?.content ?? '');
+        const result = await runCustom(customTools.get(name),args,file?.content ?? '');
+        // Only the host can perform effects; custom JavaScript never gets VFS access.
+        // A tool may return a single text write, confined to the current workspace.
+        const write = JSON.parse(result)?.writeText;
+        if (write !== undefined) {
+          if (!getActiveToolDefinitions().some(tool => tool.function.name === 'Write')) throw new Error('Schreibzugriff ist in diesem Chat deaktiviert.');
+          if (!write || typeof write.path !== 'string' || !write.path || write.path !== normalizePath(write.path) ||
+              ['__proto__','constructor','prototype'].includes(write.path) || typeof write.content !== 'string' || write.content.length > 100000) throw new Error('Ungültiger Workspace-Schreibauftrag.');
+          VFS.write(write.path, write.content);
+          return JSON.stringify({written:write.path});
+        }
+        return result;
       }
       if (!Object.hasOwn(toolHandlers, name)) throw new Error('Unbekanntes Tool: ' + name);
       return toolHandlers[name](args);
@@ -4512,7 +4554,7 @@
       const runtime = toolsFor(chat);
       const groups = new Map();
       for (const {function: tool} of [...runtime.getBuiltinToolDefinitions(), ...runtime.getCustomDefinitions()]) {
-        const group = customTools.has(tool.name) ? 'Eigene Tools' : toolGroup(tool.name);
+        const group = tool.name.startsWith('Custom_') ? 'Eigene Tools' : toolGroup(tool.name);
         if (!groups.has(group)) groups.set(group, []);
         groups.get(group).push(tool);
       }
@@ -4542,7 +4584,7 @@
           groupToggle.indeterminate = count > 0 && count < toggles.length;
         }
         function setTool(name, checked) {
-          if (customTools.has(name)) { chat.customEnabled ??= {}; chat.customEnabled[name] = checked; return; }
+          if (name.startsWith('Custom_')) { chat.customEnabled ??= {}; chat.customEnabled[name] = checked; return; }
           chat.toolOverrides ??= {};
           chat.toolOverrides[name] = {...chat.toolOverrides[name], disabled:!checked};
         }
@@ -4562,7 +4604,7 @@
           const label = document.createElement('label');
           const toggle = document.createElement('input');
           toggle.type = 'checkbox';
-          toggle.checked = customTools.has(tool.name) ? chat.customEnabled?.[tool.name] === true : !chat.disabledToolGroups?.[group] && !chat.toolOverrides?.[tool.name]?.disabled;
+          toggle.checked = tool.name.startsWith('Custom_') ? chat.customEnabled?.[tool.name] === true : !chat.disabledToolGroups?.[group] && !chat.toolOverrides?.[tool.name]?.disabled;
           toggles.push({name:tool.name, toggle});
           label.append(toggle, ' ' + tool.name);
           toggle.addEventListener('change', () => {
@@ -4589,10 +4631,28 @@
             details.hidden = !details.hidden;
             button.setAttribute('aria-expanded', String(!details.hidden));
             if (details.hidden) return;
-            details.textContent = JSON.stringify({...tool, description:effective, javascript: customTools.get(tool.name)?.javascript ?? runtime.toolHandlers[tool.name]?.toString() ?? null, group, enabledInChat:toggle.checked,
+            details.textContent = JSON.stringify({...tool, description:effective, javascript: customTools.get(tool.name)?.javascript ?? runtime.toolHandlers[tool.name]?.toString() ?? null, fields:customTools.get(tool.name)?.fields || [], group, enabledInChat:toggle.checked,
               ...(group === 'GitHub' ? {groupSettings:{repository:state.config.githubRepo || '', tokenConfigured:Boolean(state.config.githubToken)}} : {})}, null, 2);
           });
           row.append(label, description, button, details);
+          const settings = document.createElement('div');
+          settings.style.gridColumn = '1 / -1';
+          renderCustomFields(tool.name, customTools.get(tool.name)?.fields, settings);
+          if (settings.childElementCount) row.append(settings);
+          if (customTools.has(tool.name) && !tool.name.startsWith('Custom_')) {
+            const reset = document.createElement('button');
+            reset.type = 'button';
+            reset.className = 'btn btn-sm';
+            reset.textContent = 'Original wiederherstellen';
+            reset.addEventListener('click', () => {
+              const next = new Map(customTools);
+              next.delete(tool.name);
+              localStorage.removeItem(settingsKey + tool.name);
+              try { localStorage.setItem(customKey, JSON.stringify([...next])); customTools = next; renderToolSettings(); }
+              catch (error) { toast(error.message, 'error'); }
+            });
+            row.append(reset);
+          }
           section.append(row);
         }
         syncGroup();
