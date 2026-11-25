@@ -1864,8 +1864,7 @@
         const input = document.createElement('input');
         input.type = field.credential ? 'password' : 'text';
         input.autocomplete = 'off';
-        input.value = field.credential ? '' : readToolSettings(scope).get(field.key) || '';
-        if (field.credential && readToolSettings(scope).has(field.key)) input.placeholder = '****';
+        input.value = readToolSettings(scope).get(field.key) || '';
         const inputError = document.createElement('span');
         bindFieldError(input, inputError);
         input.addEventListener('change', () => {
@@ -1873,7 +1872,6 @@
           if (input.value) values.set(field.key,input.value); else values.delete(field.key);
           try { localStorage.setItem(settingsKey + scope, JSON.stringify([...values])); }
           catch (error) { showFieldError(input, inputError, error.message); return; }
-          if (field.credential) { input.value = ''; input.placeholder = readToolSettings(scope).has(field.key) ? '****' : ''; }
         });
         label.append(field.key,input,inputError); container.append(label);
         if (field.credential) {
