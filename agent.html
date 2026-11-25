@@ -1321,7 +1321,7 @@
         <div class="brand">
           <div class="brand-mark">&gt;_</div>
           <span>MyAiAgent</span>
-          <small id="buildVersion" title="Kennung des geladenen App-Codes">Build –</small>
+          <small id="lastModified" title="Letzte Änderung laut Server" hidden></small>
         </div>
         <button class="model-pill" id="btnModelPill" title="API & Modell konfigurieren">
           <span class="status-dot" id="statusDot"></span>
@@ -1567,11 +1567,6 @@
   <script>
   (() => {
     'use strict';
-    // Fingerprint the script that is actually running, not the current GitHub branch.
-    const source = document.currentScript.textContent;
-    let hash = 2166136261;
-    for (const byte of new TextEncoder().encode(source)) hash = Math.imul(hash ^ byte, 16777619);
-    document.getElementById('buildVersion').textContent = 'Build ' + (hash >>> 0).toString(16).padStart(8, '0');
 
     /* =========================================================================
        1. CONSTANTS & DEFAULT STATE
@@ -5603,6 +5598,22 @@
 
     init();
   })();
+  </script>
+  <script>
+    (async () => {
+      // lastModified can fall back to the current time; require a matching server header.
+      if (!['http:', 'https:'].includes(location.protocol)) return;
+      const modified = Date.parse(document.lastModified);
+      if (!Number.isFinite(modified)) return;
+      try {
+        const response = await fetch(location.href, {method:'HEAD', cache:'no-store', signal:AbortSignal.timeout(5000)});
+        const header = response.headers.get('Last-Modified');
+        if (!response.ok || !header || Date.parse(header) !== modified) return;
+        const label = document.getElementById('lastModified');
+        label.textContent = new Date(modified).toLocaleString('de-DE');
+        label.hidden = false;
+      } catch { /* No confirmed modification date. */ }
+    })();
   </script>
 </body>
 </html>
