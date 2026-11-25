@@ -3684,6 +3684,33 @@
         // Only the host can perform effects; custom JavaScript never gets VFS access.
         // A tool may return a single text write, confined to the current workspace.
         const output = JSON.parse(result);
+        if (name === 'Custom_BitbucketReadOnly' && output?.readLocalBitbucket === true) {
+          if (!['127.0.0.1', 'localhost'].includes(location.hostname)) throw new Error('MyAiAgent über den lokalen Proxy öffnen.');
+          const path = args.input ?? '';
+          if (typeof path !== 'string' || path.length > 512) throw new Error('Ungültiger Repository-Pfad.');
+          const response = await fetch('/_local/bitbucket?' + new URLSearchParams({path}), {
+            mode: 'same-origin', credentials: 'omit', redirect: 'error', cache: 'no-store',
+            headers: {'X-MyAiAgent-Read': '1'}, signal: AbortSignal.timeout(12000),
+          });
+          if (!response.ok || !response.headers.get('content-type')?.startsWith('text/plain')) {
+            await response.body?.cancel();
+            throw new Error('Lokaler Bitbucket-Lesezugriff fehlgeschlagen (HTTP ' + response.status + ').');
+          }
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder('utf-8', {fatal:true});
+          let size = 0, content = '';
+          try {
+            for (;;) {
+              const {done,value} = await reader.read();
+              if (done) break;
+              size += value.byteLength;
+              if (size > 65536) throw new Error('Bitbucket-Antwort zu groß.');
+              content += decoder.decode(value, {stream:true});
+            }
+            content += decoder.decode();
+          } finally { await reader.cancel().catch(() => {}); }
+          return JSON.stringify({source:'Bitbucket (untrusted data)',path,content});
+        }
         const request = output?.requestConfigured;
         if (request !== undefined) {
           if (!getActiveToolDefinitions().some(item => item.function.name === name)) throw new Error('Tool nicht mehr aktiv.');
