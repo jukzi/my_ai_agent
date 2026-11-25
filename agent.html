@@ -1899,6 +1899,14 @@
       });
       return makeRuntime(stateForChat, chat);
     }
+    function toolGroup(name) {
+      if (name.startsWith('GitHub_')) return 'GitHub';
+      if (['WebFetch','JinaReader'].includes(name)) return 'Web';
+      if (['RunPython','RunJava','RunJavaScript','Bash'].includes(name)) return 'Laufzeiten';
+      if (/^(Show|Memory|Todo)/.test(name)) return 'Ausgabe und Organisation';
+      return 'Workspace';
+    }
+
     function makeRuntime(state, chat) {
     const VFS = {
       list(prefix = '') {
@@ -3256,7 +3264,7 @@
     function getActiveToolDefinitions() {
       const overrides = chat.toolOverrides || {};
       const management = {type: 'function', function: {name: 'ConfigureChatTool', description: 'Ändert Beschreibung oder Aktivierung eines vorhandenen Tools nur in diesem Chat.', parameters: {type: 'object', properties: {name:{type:'string'}, enabled:{type:'boolean'}, description:{type:'string'}}, required:['name','enabled']}}};
-      const builtins = getBuiltinToolDefinitions().filter(tool => !overrides[tool.function.name]?.disabled).map(tool => {
+      const builtins = getBuiltinToolDefinitions().filter(tool => !overrides[tool.function.name]?.disabled && !chat.disabledToolGroups?.[toolGroup(tool.function.name)]).map(tool => {
         const description = overrides[tool.function.name]?.description;
         return description ? {...tool, function:{...tool.function, description}} : tool;
       });
@@ -4414,51 +4422,76 @@
       $('#cfgInputRate').value = rates?.inputRate ?? '';
       $('#cfgOutputRate').value = rates?.outputRate ?? '';
     }
-    // Configuration fields are independent of the model's per-call arguments.
-    const toolConfigFields = () => [];
     function renderToolSettings() {
       const chat = activeChat;
       const panel = $('#toolSettingsList');
+      const runtime = toolsFor(chat);
+      const groups = new Map();
+      for (const {function: tool} of runtime.getBuiltinToolDefinitions()) {
+        const group = toolGroup(tool.name);
+        if (!groups.has(group)) groups.set(group, []);
+        groups.get(group).push(tool);
+      }
       panel.replaceChildren();
-      for (const {function: tool} of toolsFor(chat).getBuiltinToolDefinitions()) {
-        const row = document.createElement('div');
-        row.className = 'tool-settings-row';
+      for (const [group, tools] of groups) {
+        const section = document.createElement('fieldset');
+        const heading = document.createElement('legend');
         const label = document.createElement('label');
-        const enabled = document.createElement('input');
-        enabled.type = 'checkbox';
-        enabled.checked = !chat.toolOverrides?.[tool.name]?.disabled;
-        label.append(enabled, ' ' + tool.name);
-        const fields = document.createElement('div');
-        const inputs = toolConfigFields(tool.name).map(field => {
-          const fieldLabel = document.createElement('label');
-          fieldLabel.className = 'field';
-          const input = document.createElement('input');
-          input.type = field.credential ? 'password' : 'text';
-          input.value = chat.toolOverrides?.[tool.name]?.config?.[field.key] || '';
-          fieldLabel.append(field.label, input);
-          fields.append(fieldLabel);
-          return [field.key, input];
-        });
-        function update() {
-          chat.toolOverrides ??= {};
-          const previous = chat.toolOverrides[tool.name] || {};
-          chat.toolOverrides[tool.name] = {...previous, disabled:!enabled.checked,
-            config:Object.fromEntries(inputs.map(([key, input]) => [key, input.value.trim()]))};
+        const groupToggle = document.createElement('input');
+        groupToggle.type = 'checkbox';
+        groupToggle.checked = !chat.disabledToolGroups?.[group];
+        label.append(groupToggle, ' ' + group);
+        heading.append(label);
+        section.append(heading);
+        const toggles = [];
+        groupToggle.addEventListener('change', () => {
+          chat.disabledToolGroups ??= {};
+          chat.disabledToolGroups[group] = !groupToggle.checked;
+          for (const button of section.querySelectorAll('button[aria-expanded="true"]')) button.click();
+          for (const toggle of toggles) toggle.disabled = !groupToggle.checked;
           saveChat();
+        });
+        for (const tool of tools) {
+          const row = document.createElement('div');
+          row.className = 'tool-settings-row';
+          const label = document.createElement('label');
+          const toggle = document.createElement('input');
+          toggle.type = 'checkbox';
+          toggle.checked = !chat.toolOverrides?.[tool.name]?.disabled;
+          toggle.disabled = !groupToggle.checked;
+          toggles.push(toggle);
+          label.append(toggle, ' ' + tool.name);
+          toggle.addEventListener('change', () => {
+            chat.toolOverrides ??= {};
+            chat.toolOverrides[tool.name] = {...chat.toolOverrides[tool.name], disabled:!toggle.checked};
+            saveChat();
+          });
+          const description = document.createElement('div');
+          const effective = chat.toolOverrides?.[tool.name]?.description || tool.description;
+          description.textContent = effective;
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'btn btn-sm';
+          button.textContent = '🔍';
+          button.setAttribute('aria-label', 'Konfiguration für ' + tool.name);
+          button.setAttribute('aria-expanded', 'false');
+          const details = document.createElement('pre');
+          details.hidden = true;
+          details.style.cssText = 'grid-column:1/-1;white-space:pre-wrap;overflow-wrap:anywhere';
+          button.addEventListener('click', () => {
+            details.hidden = !details.hidden;
+            button.setAttribute('aria-expanded', String(!details.hidden));
+            if (details.hidden) return;
+            const source = runtime.executeTool.toString();
+            const start = source.indexOf("case '" + tool.name + "':");
+            const handler = start < 0 ? 'Kein separater Handler-Quelltext verfügbar.' : source.slice(start).split(/\n\s*(?:case |default:)/)[0].trim();
+            details.textContent = JSON.stringify({...tool, description:effective, group, enabledInGroup:groupToggle.checked, enabledInChat:toggle.checked,
+              ...(group === 'GitHub' ? {sharedSettings:{repository:state.config.githubRepo || '', tokenConfigured:Boolean(state.config.githubToken)}} : {})}, null, 2) + '\n\nJavaScript (eingebauter Handler, ohne Hilfsfunktionen):\n' + handler;
+          });
+          row.append(label, description, button, details);
+          section.append(row);
         }
-        enabled.addEventListener('change', update);
-        for (const [, input] of inputs) input.addEventListener('change', update);
-        const reset = document.createElement('button');
-        reset.type = 'button';
-        reset.className = 'btn btn-sm';
-        reset.textContent = 'Standard';
-        reset.addEventListener('click', () => {
-          if (chat.toolOverrides) delete chat.toolOverrides[tool.name];
-          saveChat();
-          renderToolSettings();
-        });
-        row.append(label, fields, reset);
-        panel.append(row);
+        panel.append(section);
       }
     }
 
