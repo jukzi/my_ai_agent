@@ -3383,7 +3383,7 @@
         return description ? {...tool, function:{...tool.function, description}} : tool;
       });
       const custom = getCustomDefinitions().filter(tool => chat.customEnabled?.[tool.function.name] === true);
-      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liest normale Werte und den Status von Credentials. setConfig setzt einen Wert mit field und value; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten GET an das vom Nutzer hinterlegte feste Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String}} zurück. Nur HTTP-Status. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
+      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liest normale Werte und den Status von Credentials. setConfig setzt einen Wert mit field und value; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten GET an das vom Nutzer hinterlegte feste Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String}} zurück. Nur HTTP-Status. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für Vorschauen gib {display:{kind:"html" oder "image",path:String}} für eine Workspace-Datei zurück. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
       return [...builtins, ...custom, management, ...(state.config.optionalTools.javascript ? [manage] : [])];
     }
 
@@ -3533,17 +3533,17 @@
           if (!file || !isImageFile(path, file.mime) || !getImageDataUrl(path, file)) {
             throw new Error('Keine darstellbare Bilddatei: ' + path);
           }
-          return 'Bild im Chat angezeigt: ' + path;
+          return JSON.stringify({display:{kind:'image',path}});
       },
       ShowTable: async (args) => {
           if (!tablePreview(args)) throw new Error('Ungültige Tabelle: erwartet bis zu 20 Spalten und 200 gleich breite Zeilen aus Textzellen.');
-          return 'Tabelle angezeigt';
+          return JSON.stringify({display:{kind:'table',data:args}});
       },
       ShowHTML: async (args) => {
           const path = normalizePath(args.file_path);
           const file = VFS.get(path);
           if (!file || file.isBinary || !['html','htm'].includes(getExt(path))) throw new Error('HTML-Datei nicht gefunden: ' + path);
-          return 'Interaktive Vorschau: ' + path;
+          return JSON.stringify({display:{kind:'html',path}});
       },
       MemoryWrite: async (args) => {
           const key = String(args.key || '').trim();
@@ -4285,6 +4285,21 @@
     let initialChatScroll = null;
     try { initialChatScroll = sessionStorage.getItem(chatScrollKey); } catch {}
 
+    // Legacy presentation defaults for chat history saved before structured outputs.
+    const presentationDefaults = new Map([
+      ['ShowHTML', 'html'], ['ShowImage', 'image'], ['ShowTable', 'table'],
+    ]);
+    function toolPresentation(call) {
+      if (call.status !== 'ok') return {};
+      try {
+        const value = JSON.parse(call.result);
+        if (value?.display && ['html','image','table'].includes(value.display.kind)) return value.display;
+        if (value?.table) return {kind:'table', data:value.table};
+      } catch { /* Plain text is a valid result. */ }
+      const kind = presentationDefaults.get(call.name);
+      return {kind, path:call.args?.file_path, data:call.args};
+    }
+
     function tablePreview(t) {
       if (!Array.isArray(t?.headers) || !t.headers.length || t.headers.length > 20 || !t.headers.every(v=>typeof v==='string') || !Array.isArray(t.rows) || t.rows.length>200 || !t.rows.every(r=>Array.isArray(r)&&r.length===t.headers.length&&r.every(v=>typeof v==='string'))) return '';
       const row=(cells,tag)=>'<tr>'+cells.map(v=>'<'+tag+'>'+escapeHtml(v)+'</'+tag+'>').join('')+'</tr>';
@@ -4333,7 +4348,7 @@
               ${m.tool_calls.map((tc) => {
                 const argsIndex = toolText.push(formatToolText(tc.args ?? {})) - 1;
                 let result = tc.result ?? '(wartet…)';
-                if (tc.status === 'ok' && tc.name.startsWith('GitHub_')) {
+                if (tc.status === 'ok') {
                   try { result = JSON.parse(result); } catch { /* Keep plain text unchanged. */ }
                 }
                 const resultIndex = toolText.push(formatToolText(result)) - 1;
@@ -4341,29 +4356,21 @@
                 const statusLabel = tc.status === 'running' ? 'läuft…' : tc.status === 'error' ? 'fehler' : `${tc.durationMs || 0}ms`;
                 // Show inline image if tool wrote/read an image
                 let imgPreview = '';
-                const targetPath = tc.args?.file_path;
-                const file = tc.name === 'ShowHTML' && tc.status === 'ok' && VFS.get(targetPath);
+                const presentation = toolPresentation(tc);
+                const targetPath = presentation.path || tc.args?.file_path;
+                const file = presentation.kind === 'html' && VFS.get(targetPath);
                 const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">`;
                 const htmlPreview = file && !file.isBinary && ['html','htm'].includes(getExt(targetPath))
                   ? `<iframe title="Interaktive HTML-Vorschau" sandbox="allow-scripts" referrerpolicy="no-referrer" style="width:100%;height:440px;border:0" srcdoc="${escapeHtml(policy + file.content)}"></iframe>` : '';
-                const inline = tc.name === "ShowImage" && tc.status === "ok";
-                if ((tc.name !== "ShowImage" || inline) && targetPath && VFS.exists(targetPath) && isImageFile(targetPath, VFS.get(targetPath).mime)) {
+                const inline = presentation.kind === "image";
+                if ((!presentation.kind || inline) && targetPath && VFS.exists(targetPath) && isImageFile(targetPath, VFS.get(targetPath).mime)) {
                   const url = getImageDataUrl(targetPath, VFS.get(targetPath));
                   if (url) imgPreview = `<img src="${escapeHtml(url)}" data-lightbox="${escapeHtml(url)}" style="max-width:100%; max-height:180px; margin-top:6px; border-radius:6px; cursor:zoom-in;" alt="${escapeHtml(targetPath)}" />`;
                 }
                 if (tc.status === 'ok') {
-                  if (tc.name === 'ShowHTML') displays[index].push(htmlPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button><button type="button" class="btn btn-sm btn-icon" data-preview-download="${escapeHtml(targetPath)}" title="Herunterladen" aria-label="Herunterladen">↓</button>${htmlPreview}</div>` : "");
-                  if (tc.name === 'ShowImage') displays[index].push(inline && imgPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button><button type="button" class="btn btn-sm btn-icon" data-preview-download="${escapeHtml(targetPath)}" title="Herunterladen" aria-label="Herunterladen">↓</button>${imgPreview}</div>` : "");
-                  if (tc.name === 'ShowTable') displays[index].push(tablePreview(tc.args));
-                  if (tc.name.startsWith('Custom_') && tc.status === 'ok') {
-                    try {
-                      const table = JSON.parse(tc.result)?.table;
-                      if (Array.isArray(table?.headers) && table.headers.length <= 50 && table.headers.every(cell => typeof cell === 'string') &&
-                          Array.isArray(table.rows) && table.rows.length <= 500 && table.rows.every(row => Array.isArray(row) && row.length === table.headers.length && row.every(cell => typeof cell === 'string'))) {
-                        displays[index].push(tablePreview(table));
-                      }
-                    } catch { /* Non-table output is shown as a normal tool result. */ }
-                  }
+                  if (presentation.kind === 'html') displays[index].push(htmlPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button><button type="button" class="btn btn-sm btn-icon" data-preview-download="${escapeHtml(targetPath)}" title="Herunterladen" aria-label="Herunterladen">↓</button>${htmlPreview}</div>` : "");
+                  if (presentation.kind === 'image') displays[index].push(inline && imgPreview ? `<div class="preview-fullscreen"><button type="button" class="btn btn-sm btn-icon" data-fullscreen title="Vollbild" aria-label="Vollbild"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg></button><button type="button" class="btn btn-sm btn-icon" data-preview-download="${escapeHtml(targetPath)}" title="Herunterladen" aria-label="Herunterladen">↓</button>${imgPreview}</div>` : "");
+                  if (presentation.kind === 'table') displays[index].push(tablePreview(presentation.data));
                 }
                 return `
                   <div class="tool-card ${tc.status === 'error' ? 'open' : ''}">
