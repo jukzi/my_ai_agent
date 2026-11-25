@@ -4510,7 +4510,7 @@
             const source = runtime.executeTool.toString();
             const start = source.indexOf("case '" + tool.name + "':");
             const handler = start < 0 ? 'Kein separater Handler-Quelltext verfügbar.' : source.slice(start).split(/\n\s*(?:case |default:)/)[0].trim();
-            details.textContent = JSON.stringify({...tool, description:effective, javascript: start < 0 ? null : handler, group, groupState:groupToggle.indeterminate ? 'mixed' : groupToggle.checked ? 'enabled' : 'disabled', enabledInChat:toggle.checked,
+            details.textContent = JSON.stringify({...tool, description:effective, javascript: start < 0 ? null : handler, group, enabledInChat:toggle.checked,
               ...(group === 'GitHub' ? {sharedSettings:{repository:state.config.githubRepo || '', tokenConfigured:Boolean(state.config.githubToken)}} : {})}, null, 2);
           });
           row.append(label, description, button, details);
