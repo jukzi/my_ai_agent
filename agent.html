@@ -1844,6 +1844,12 @@
     let customTools = new Map();
     try { customTools = new Map(JSON.parse(localStorage.getItem(customKey) || '[]')); } catch {}
     const settingsKey = 'myaiagent_tool_settings_v1';
+    const groupFieldsKey = 'myaiagent_custom_group_fields_v1';
+    function readGroupFields() {
+      try { return new Map(JSON.parse(localStorage.getItem(groupFieldsKey) || '[]')); }
+      catch { return new Map(); }
+    }
+    const customGroup = tool => tool.group || 'Eigene Tools';
     function readToolSettings(scope) {
       try { return new Map(JSON.parse(localStorage.getItem(settingsKey + scope) || '[]')); }
       catch { return new Map(); }
@@ -1865,6 +1871,27 @@
           if (field.credential) { input.value = ''; input.placeholder = readToolSettings(scope).has(field.key) ? 'Gesetzt' : ''; }
         });
         label.append(field.key,input); container.append(label);
+        if (field.credential) {
+          const target = document.createElement('label');
+          target.className = 'field';
+          const url = document.createElement('input');
+          url.type = 'text';
+          const key = 'endpoint:' + field.key;
+          url.value = readToolSettings(scope).get(key) || '';
+          url.addEventListener('change', () => {
+            const values = readToolSettings(scope);
+            try {
+              if (url.value.trim()) {
+                const parsed = new URL(url.value.trim());
+                if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.hash || parsed.search) throw new Error('Bitte eine HTTPS-URL ohne Zugangsdaten oder Fragment eingeben.');
+                values.set(key, parsed.href);
+              } else values.delete(key);
+              localStorage.setItem(settingsKey + scope, JSON.stringify([...values]));
+            } catch (error) { url.value = readToolSettings(scope).get(key) || ''; toast(error.message, 'error'); }
+          });
+          target.append('Festes HTTPS-Ziel für ' + field.key, url);
+          container.append(target);
+        }
       }
     }
     function runCustom(tool, args, text) {
@@ -1876,7 +1903,7 @@
           addEventListener('message', ({source,data}) => {
             if (source !== parent) return;
             try {
-              const script = 'onmessage=async ({data})=>{try{const fn=(' + data.code + ');postMessage({result:JSON.stringify(await fn(data.args,{text:data.text,config:data.config}))});}catch(e){postMessage({error:String(e)});}}';
+              const script = 'onmessage=async ({data})=>{try{const fn=(' + data.code + ');postMessage({result:JSON.stringify(await fn(data.args,{text:data.text,config:data.config,groupSettings:data.groupSettings}))});}catch(e){postMessage({error:String(e)});}}';
               const worker = new Worker(URL.createObjectURL(new Blob([script],{type:'text/javascript'})));
               worker.onmessage = event => { worker.terminate(); parent.postMessage(event.data,'*'); };
               worker.onerror = () => { worker.terminate(); parent.postMessage({error:'Ungültiger JavaScript-Code'},'*'); };
@@ -1893,7 +1920,7 @@
         };
         const timer = setTimeout(() => { finish(); reject(new Error('JavaScript-Tool: Zeitlimit erreicht')); }, 5000);
         addEventListener('message', receive);
-        frame.onload = () => frame.contentWindow.postMessage({code:tool.javascript,args,text,config:Object.fromEntries((tool.fields || []).filter(field => !field.credential).map(field => [field.key,readToolSettings(tool.name).get(field.key) || ""]))},'*');
+        frame.onload = () => frame.contentWindow.postMessage({code:tool.javascript,args,text,config:Object.fromEntries((tool.fields || []).filter(field => !field.credential).map(field => [field.key,readToolSettings(tool.name).get(field.key) || ""])),groupSettings:Object.fromEntries((readGroupFields().get(customGroup(tool)) || []).filter(field => !field.credential).map(field => [field.key,readToolSettings('group:' + customGroup(tool)).get(field.key) || '']))},'*');
         frame.srcdoc = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:"><script>(${boot.toString()})()<${'/script>'}`;
         document.body.append(frame);
       });
@@ -3323,7 +3350,7 @@
     }
 
     function getCustomDefinitions() {
-      return state.config.optionalTools.javascript ? [...customTools.values()].filter(tool => tool.name.startsWith('Custom_')).map(({javascript,fields,...definition}) => ({type:'function',function:definition})) : [];
+      return state.config.optionalTools.javascript ? [...customTools.values()].filter(tool => tool.name.startsWith('Custom_')).map(({javascript,fields,group,...definition}) => ({type:'function',function:definition})) : [];
     }
     function getActiveToolDefinitions() {
       const overrides = chat.toolOverrides || {};
@@ -3333,7 +3360,7 @@
         return description ? {...tool, function:{...tool.function, description}} : tool;
       });
       const custom = getCustomDefinitions().filter(tool => chat.customEnabled?.[tool.function.name] === true);
-      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'getConfig liest normale Werte und den Status von Credentials. setConfig setzt einen Wert mit field und value; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig']},name:{type:'string'},field:{type:'string'},value:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
+      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liest normale Werte und den Status von Credentials. setConfig setzt einen Wert mit field und value; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten GET an das vom Nutzer hinterlegte feste Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String}} zurück. Nur HTTP-Status. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
       return [...builtins, ...custom, management, ...(state.config.optionalTools.javascript ? [manage] : [])];
     }
 
@@ -3565,18 +3592,35 @@
       args = args || {};
       if (name === 'ManageJavaScriptTool') {
         const {action,name:key,description,javascript,fields = []} = args;
+        if (args.group !== undefined && (typeof args.group !== 'string' || !/^[A-Za-z0-9 _-]{1,40}$/.test(args.group) || !args.group.trim())) throw new Error('Ungültige Gruppe.');
+        if (!Array.isArray(fields) || fields.length > 30 || fields.some(field => !field || typeof field.key !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(field.key) || typeof field.credential !== 'boolean') || new Set(fields.map(field => field.key)).size !== fields.length) throw new Error('Ungültige Konfigurationsfelder.');
+        if (action === 'defineGroup') {
+          const tool = customTools.get(key);
+          if (typeof key !== 'string' || !key.startsWith('Custom_') || !tool || !getActiveToolDefinitions().some(t => t.function.name === key)) throw new Error('Aktives eigenes Tool erforderlich.');
+          const group = customGroup(tool);
+          const groups = readGroupFields();
+          const scope = 'group:' + group;
+          const values = readToolSettings(scope);
+          for (const field of groups.get(group) || []) if (!fields.some(item => item.key === field.key && item.credential === field.credential)) { values.delete(field.key); values.delete('endpoint:' + field.key); }
+          localStorage.setItem(settingsKey + scope, JSON.stringify([...values]));
+          groups.set(group, fields);
+          localStorage.setItem(groupFieldsKey, JSON.stringify([...groups]));
+          return 'Gruppenfelder gespeichert.';
+        }
         if (action === 'getConfig' || action === 'setConfig') {
           const tool = customTools.get(key);
           if (!tool || !getActiveToolDefinitions().some(t => t.function.name === key)) throw new Error('Tool ist in diesem Chat nicht aktiv.');
-          const values = readToolSettings(key);
-          if (action === 'getConfig') return JSON.stringify(Object.fromEntries((tool.fields || []).map(field => [field.key,field.credential ? {configured:values.has(field.key)} : values.get(field.key) ?? ''])));
-          const field = (tool.fields || []).find(field => field.key === args.field);
+          const scope = args.scope === 'group' ? 'group:' + customGroup(tool) : key;
+          const fields = args.scope === 'group' ? readGroupFields().get(customGroup(tool)) || [] : tool.fields || [];
+          const values = readToolSettings(scope);
+          if (action === 'getConfig') return JSON.stringify(Object.fromEntries(fields.map(field => [field.key,field.credential ? {configured:values.has(field.key)} : values.get(field.key) ?? ''])));
+          const field = fields.find(field => field.key === args.field);
           if (!field || typeof args.value !== 'string' || args.value.length > 10000) throw new Error('Ungültiger Konfigurationswert.');
-          if (args.value) values.set(field.key,args.value); else values.delete(field.key);
-          localStorage.setItem(settingsKey + key,JSON.stringify([...values]));
+          if (args.value) values.set(field.key,args.value); else { values.delete(field.key); values.delete('endpoint:' + field.key); }
+          localStorage.setItem(settingsKey + scope,JSON.stringify([...values]));
           return 'Konfiguration gespeichert.';
         }
-        if (!Array.isArray(fields) || fields.length > 30 || fields.some(field => !field || typeof field.key !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(field.key) || typeof field.credential !== 'boolean') || new Set(fields.map(field => field.key)).size !== fields.length) throw new Error('Ungültige Konfigurationsfelder.');
+
         const builtin = typeof key === 'string' && Object.hasOwn(toolHandlers,key);
         if (typeof key !== 'string' || (!builtin && !/^Custom_[A-Za-z0-9_]{1,50}$/.test(key))) throw new Error('Ungültiger Toolname.');
         if (builtin && !getBuiltinToolDefinitions().some(t => t.function.name === key)) throw new Error('Standardtool ist global deaktiviert.');
@@ -3586,9 +3630,9 @@
         else if (action === 'save' && typeof description === 'string' && typeof javascript === 'string' && javascript.length <= 20000) {
           const previous = next.get(key)?.fields || [];
           const values = readToolSettings(key);
-          for (const field of previous) if (!fields.some(item => item.key === field.key && item.credential === field.credential)) values.delete(field.key);
+          for (const field of previous) if (!fields.some(item => item.key === field.key && item.credential === field.credential)) { values.delete(field.key); values.delete('endpoint:' + field.key); }
           localStorage.setItem(settingsKey + key, JSON.stringify([...values]));
-          next.set(key,{name:key,fields,description:description.slice(0,2000),javascript,parameters:{type:'object',properties:{file_path:{type:'string'},input:{type:'string'}}}});
+          next.set(key,{name:key,fields,group:builtin ? undefined : args.group ? "Eigene Tools / " + args.group.trim() : next.get(key)?.group,description:description.slice(0,2000),javascript,parameters:{type:'object',properties:{file_path:{type:'string'},input:{type:'string'}}}});
         } else throw new Error('Ungültige Tool-Definition');
         localStorage.setItem(customKey,JSON.stringify([...next]));
         customTools = next;
@@ -3603,7 +3647,27 @@
         const result = await runCustom(customTools.get(name),args,file?.content ?? '');
         // Only the host can perform effects; custom JavaScript never gets VFS access.
         // A tool may return a single text write, confined to the current workspace.
-        const write = JSON.parse(result)?.writeText;
+        const output = JSON.parse(result);
+        const request = output?.requestConfigured;
+        if (request !== undefined) {
+          if (!getActiveToolDefinitions().some(item => item.function.name === name)) throw new Error('Tool nicht mehr aktiv.');
+          const tool = customTools.get(name);
+          const group = request?.scope === 'group';
+          const scope = group ? 'group:' + customGroup(tool) : name;
+          const fields = group ? readGroupFields().get(customGroup(tool)) : tool.fields;
+          const field = fields?.find(item => item.credential && item.key === request?.credential);
+          const values = readToolSettings(scope);
+          const token = field && values.get(field.key);
+          const endpoint = field && values.get('endpoint:' + field.key);
+          if (!token || !endpoint) throw new Error('Credential und festes HTTPS-Ziel müssen konfiguriert sein.');
+          const url = new URL(endpoint);
+          if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw new Error('Ungültiges Credential-Ziel.');
+          const response = await fetch(url, {method:'GET', credentials:'omit', redirect:'error', referrerPolicy:'no-referrer', signal:AbortSignal.timeout(10000), headers:{Authorization:'Bearer ' + token}});
+          // Do not expose responses from authenticated endpoints to generated code or chat.
+          await response.body?.cancel();
+          return JSON.stringify({ok:response.ok,status:response.status});
+        }
+        const write = output?.writeText;
         if (write !== undefined) {
           if (!getActiveToolDefinitions().some(tool => tool.function.name === 'Write')) throw new Error('Schreibzugriff ist in diesem Chat deaktiviert.');
           if (!write || typeof write.path !== 'string' || !write.path || write.path !== normalizePath(write.path) ||
@@ -3862,6 +3926,7 @@
           if (!msg) throw new Error('Leere Antwort vom API-Provider erhalten.');
 
           const rawToolCalls = msg.tool_calls || [];
+          const privateArgs = new Map();
           const assistantEntry = {
             id: uid('msg'),
             role: 'assistant',
@@ -3870,10 +3935,15 @@
               let parsed = {};
               const rawArgs = tc.function?.arguments || '{}';
               try { parsed = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs; } catch { parsed = { _raw: rawArgs }; }
+              const id = tc.id || uid('call');
+              if (tc.function?.name === 'ManageJavaScriptTool' && parsed?.action === 'setConfig') {
+                privateArgs.set(id, parsed);
+                parsed = {...parsed, value:'[ausgeblendet]'};
+              }
               return {
-                id: tc.id || uid('call'),
+                id,
                 name: tc.function?.name || 'unknown',
-                rawArgs: typeof rawArgs === 'string' ? rawArgs : JSON.stringify(rawArgs),
+                rawArgs: privateArgs.has(id) ? JSON.stringify(parsed) : typeof rawArgs === 'string' ? rawArgs : JSON.stringify(rawArgs),
                 args: parsed,
                 status: 'running',
                 result: null,
@@ -3900,7 +3970,7 @@
             status('Schritt ' + step + '/' + maxSteps + ' · ' + (Object.hasOwn(labels, tc.name) ? labels[tc.name] + path : 'Führe ' + tc.name + ' aus') + '…');
             const t0 = performance.now();
             try {
-              const execute = () => executeTool(tc.name, tc.args);
+              const execute = () => executeTool(tc.name, privateArgs.get(tc.id) ?? tc.args);
               const out = await (readOnly.has(tc.name) && !customTools.has(tc.name) ? retry(execute, tc.name) : execute());
               tc.status = 'ok';
               tc.result = String(out ?? '');
@@ -4564,7 +4634,7 @@
       const runtime = toolsFor(chat);
       const groups = new Map();
       for (const {function: tool} of [...runtime.getBuiltinToolDefinitions(), ...runtime.getCustomDefinitions()]) {
-        const group = tool.name.startsWith('Custom_') ? 'Eigene Tools' : toolGroup(tool.name);
+        const group = tool.name.startsWith('Custom_') ? customGroup(customTools.get(tool.name)) : toolGroup(tool.name);
         if (!groups.has(group)) groups.set(group, []);
         groups.get(group).push(tool);
       }
@@ -4586,6 +4656,12 @@
         section.append(heading);
         const fields = sharedSettings.get(group);
         if (fields) section.append(fields);
+        const groupFields = readGroupFields().get(group);
+        if (groupFields?.length) {
+          const shared = document.createElement('div');
+          renderCustomFields('group:' + group, groupFields, shared);
+          section.append(shared);
+        }
         groupToggle.disabled = !tools.length;
         const toggles = [];
         function syncGroup() {
