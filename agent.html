@@ -4231,7 +4231,7 @@
         const f = state.workspace[path];
         const active = state.activeFile === path ? ' active' : '';
         return `
-          <div class="file-item${active}" data-open-file="${escapeHtml(path)}">
+          <div class="file-item${active}" data-open-file="${escapeHtml(path)}" draggable="true" title="Zum Kopieren in einen Ordner ziehen (unterstützte Browser)">
             <span class="file-icon">${fileIcon(path, f)}</span>
             <span class="file-name" title="${escapeHtml(path)}">${escapeHtml(path)}</span>
             <span class="file-meta">${formatBytes(getFileByteSize(f))}</span>
@@ -5274,6 +5274,23 @@
 
       // Drag & drop onto Workspace sidebar
       const fileListEl = $('#fileList');
+      fileListEl.addEventListener('dragstart', event => {
+        const row = event.target.closest('.file-item[data-open-file]');
+        if (!row || !event.dataTransfer || event.target.closest('button')) { event.preventDefault(); return; }
+        const path = row.dataset.openFile;
+        const file = VFS.get(path);
+        if (!file) { event.preventDefault(); return; }
+        const name = path.split('/').pop().replace(/:/g, '_');
+        const mime = file.mime || 'application/octet-stream';
+        const url = URL.createObjectURL(new Blob([VFS.toUint8Array(file)], {type:mime}));
+        try {
+          event.dataTransfer.effectAllowed = 'copy';
+          event.dataTransfer.setData('DownloadURL', mime + ':' + name + ':' + url);
+        } finally {
+          // The OS may consume the URL asynchronously after dragend.
+          setTimeout(() => URL.revokeObjectURL(url), 120000);
+        }
+      });
       fileListEl.addEventListener('dragover', (e) => { e.preventDefault(); fileListEl.classList.add('drop-active'); });
       fileListEl.addEventListener('dragleave', () => fileListEl.classList.remove('drop-active'));
       fileListEl.addEventListener('drop', (e) => {
