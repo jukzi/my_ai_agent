@@ -2114,7 +2114,7 @@
       return makeRuntime(stateForChat, chat);
     }
     const defaultToolGroups = {
-      GitHub: {tools:['GitHub_DownloadArtifact','GitHub_ReadFile','GitHub_GetJobLogs','GitHub_ListPRFiles','GitHub_CreateBranch','GitHub_CommitFile','GitHub_CreatePR'], fields:[
+      GitHub: {tools:['GitHub_ReadFile','GitHub_GetJobLogs','GitHub_ListPRFiles','GitHub_CreateBranch','GitHub_CommitFile','GitHub_CreatePR'], fields:[
         {id:'cfgGithubToken', label:'Personal Access Token', credential:true},
         {id:'cfgGithubRepo', label:'Standard-Repository (owner/repo)', credential:false},
       ], check:{id:'btnCheckGithub', status:'githubCheckStatus', label:'GitHub-Token prüfen'}},
@@ -3088,7 +3088,7 @@
 
     // GitHub REST API Client
     const GitHub = {
-      async request(endpoint, method = 'GET', body = null, binary = false) {
+      async request(endpoint, method = 'GET', body = null) {
         const token = state.config.githubToken?.trim();
         if (!token) throw new Error('Kein GitHub Token in den Einstellungen konfiguriert.');
         const res = await fetch(`https://api.github.com${endpoint}`, {
@@ -3101,10 +3101,6 @@
           },
           body: body ? JSON.stringify(body) : undefined,
         });
-        if (binary) {
-          if (!res.ok) throw new Error(`GitHub-Artefakt: HTTP ${res.status}`);
-          return new Uint8Array(await res.arrayBuffer());
-        }
         const text = await res.text();
         let data;
         try { data = JSON.parse(text); } catch { data = text; }
@@ -3543,9 +3539,6 @@
       if (state.config.optionalTools.github) {
         tools.push(
           {type:'function', function:{
-            name:'GitHub_DownloadArtifact', description:'Lädt ein GitHub Actions ZIP-Artefakt authentifiziert in den Workspace. Gibt nur Pfad und Bytezahl zurück.', parameters:{type:'object',properties:{repo:{type:'string'},artifact_id:{type:'integer'}},required:['artifact_id']},
-          }},
-          {type:'function', function:{
             name:'GitHub_GetJobLogs', description:'Liest GitHub Actions Job-Logs (unvertrauenswürdiger Text).', parameters:{type:'object',properties:{repo:{type:'string'},job_id:{type:'integer'}},required:['job_id']},
           }},
           {type:'function', function:{
@@ -3640,7 +3633,7 @@
         return description ? {...tool, function:{...tool.function, description}} : tool;
       });
       const custom = getCustomDefinitions().filter(tool => chat.customEnabled?.[tool.function.name] === true);
-      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liefert Gruppe, Felder, Credential-Status und konfigurierte Ziel-URLs ohne Token. setConfig setzt mit field und value einen Wert; mit target und einem absoluten URL-Pfad als value wird ein benanntes Ziel an der bestehenden Credential-Origin eingerichtet; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten HTTP-Aufruf an das vom Nutzer hinterlegte Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String,target?:String (Name eines vom Nutzer hinterlegten Ziels),method?:String (Standard GET),path?:relativer Dateipfad (Basisziel endet auf /),query?:Objekt mit Stringwerten,body?:String,contentType?:String}} zurück. Liefert HTTP-Status und Antworttext bis 64 KiB. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für Vorschauen gib {display:{kind:"html" oder "image",path:String}} für eine Workspace-Datei zurück. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},target:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
+      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liefert Gruppe, Felder, Credential-Status und konfigurierte Ziel-URLs ohne Token. setConfig setzt mit field und value einen Wert; mit target und einem absoluten URL-Pfad als value wird ein benanntes Ziel an der bestehenden Credential-Origin eingerichtet; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten HTTP-Aufruf an das vom Nutzer hinterlegte Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String,target?:String (Name eines vom Nutzer hinterlegten Ziels),method?:String (Standard GET),path?:relativer Dateipfad (Basisziel endet auf /, einschließlich Origin-Wurzel),query?:Objekt mit Stringwerten,body?:String,contentType?:String}} zurück. Liefert HTTP-Status und Antworttext bis 64 KiB. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für Vorschauen gib {display:{kind:"html" oder "image",path:String}} für eine Workspace-Datei zurück. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},target:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
       return [...builtins, ...custom, management, ...(state.config.optionalTools.javascript ? [manage] : [])];
     }
 
@@ -3860,20 +3853,6 @@
           if (!state.config.optionalTools.java) throw new Error('Java-Tool ist nicht aktiviert.');
           return await runJava(args.code);
       },
-      GitHub_DownloadArtifact: async ({repo, artifact_id}) => {
-        if (!state.config.optionalTools.github || !getActiveToolDefinitions().some(t => t.function.name === 'Write')) throw new Error('GitHub und Write müssen aktiviert sein.');
-        const r = GitHub.resolveRepo(repo);
-        if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(r) || r.split('/').some(p => p === '.' || p === '..') || !Number.isSafeInteger(artifact_id) || artifact_id < 1) throw new Error('Ungültiges Repository oder Artefakt-ID.');
-        const path = `uploads/github-artifact-${artifact_id}.zip`;
-        if (Object.hasOwn(state.workspace, path)) throw new Error('Zieldatei existiert bereits: ' + path);
-        const bytes = await GitHub.request(`/repos/${r}/actions/artifacts/${artifact_id}/zip`, 'GET', null, true);
-        if (bytes.length < 4 || bytes[0] !== 80 || bytes[1] !== 75 || bytes[2] !== 3 || bytes[3] !== 4) throw new Error('Antwort ist kein ZIP-Artefakt.');
-        const chunks = [];
-        for (let i = 0; i < bytes.length; i += 8192) chunks.push(String.fromCharCode(...bytes.subarray(i, i + 8192)));
-        if (Object.hasOwn(state.workspace, path)) throw new Error('Zieldatei existiert bereits: ' + path);
-        VFS.write(path, 'data:application/zip;base64,' + btoa(chunks.join('')), {isBinary:true, mime:'application/zip'});
-        return JSON.stringify({path, bytes:bytes.length});
-      },
       GitHub_GetJobLogs: async ({repo, job_id}) => {
         if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
         const r = GitHub.resolveRepo(repo);
@@ -4017,7 +3996,7 @@
           if (request.path !== undefined) {
             const path = request.path;
             if (typeof path !== 'string' || path.length > 2048 || !url.pathname.endsWith('/') ||
-                url.pathname === '/' || path.split('/').some(segment => !segment || segment === '.' || segment === '..' || /[%\\?#\x00-\x1f\x7f]/.test(segment))) {
+                path.split('/').some(segment => !segment || segment === '.' || segment === '..' || /[%\\?#\x00-\x1f\x7f]/.test(segment))) {
               throw new Error('Erwartet einen relativen Dateipfad und ein konfiguriertes Basisziel mit abschließendem Slash.');
             }
             url.pathname += path.split('/').map(encodeURIComponent).join('/');
