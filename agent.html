@@ -4446,7 +4446,15 @@
           }
         }
       }
-      const request = (messages, tools) => retry(() => callChatApi(messages, tools, controller.signal, chat), 'API');
+      let modelTimeMs = 0;
+      const request = async (messages, tools) => {
+        const started = performance.now();
+        try {
+          return await retry(() => callChatApi(messages, tools, controller.signal, chat), 'API');
+        } finally {
+          modelTimeMs += performance.now() - started;
+        }
+      };
       const readOnly = new Set(['Read','LS','Glob','Grep','MemoryRead','WebFetch','JinaReader','GitHub_ReadFile','GitHub_ListPRFiles']);
       const maxSteps = Math.max(1, Math.min(50, Number(state.config.maxSteps) || 20));
       let includeImages = true;
@@ -4483,6 +4491,7 @@
             id: uid('msg'),
             role: 'assistant',
             content: msg.content || '',
+            modelTimeMs: Math.round(modelTimeMs),
             tool_calls: rawToolCalls.map((tc) => {
               let parsed = {};
               const rawArgs = tc.function?.arguments || '{}';
@@ -4546,6 +4555,7 @@
             id: uid('msg'),
             role: 'assistant',
             retryable: true,
+            modelTimeMs: Math.round(modelTimeMs),
             content: `**API-Fehler:** ${err.message}\n\n*Tipp: Prüfe API Key, Base URL und Modell in den Einstellungen.*`,
             tool_calls: [],
             timestamp: Date.now(),
@@ -4903,7 +4913,8 @@
                 }
                 const resultIndex = toolText.push(formatToolText(result)) - 1;
                 const summary = tc.args?.file_path || tc.args?.command || tc.args?.pattern || tc.args?.key || tc.args?.path || tc.args?.title || '';
-                const statusLabel = tc.status === 'running' ? 'läuft…' : tc.status === 'error' ? 'fehler' : `${tc.durationMs || 0}ms`;
+                const duration = Number.isFinite(tc.durationMs) ? `${tc.durationMs} ms` : '';
+                const statusLabel = tc.status === 'running' ? 'läuft…' : tc.status === 'error' ? ['Fehler', duration].filter(Boolean).join(' · ') : duration;
                 // Show inline image if tool wrote/read an image
                 let imgPreview = '';
                 const presentation = toolPresentation(tc);
@@ -4948,7 +4959,7 @@
 
           return `
             <div class="msg-row assistant" data-search-message="${escapeHtml(m.id)}">
-              <div class="msg-meta"><span>Agent</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
+              <div class="msg-meta"><span>Agent</span><span>${time}</span>${Number.isFinite(m.modelTimeMs) ? `<span title="Kumulierte API-Wartezeit dieses Durchlaufs, inklusive Wiederholungen, ohne Tool-Schritte">KI gesamt: ${m.modelTimeMs >= 1000 ? `${(m.modelTimeMs / 1000).toLocaleString('de-DE', {maximumFractionDigits: 2})} s` : `${m.modelTimeMs} ms`}</span>` : ''}<button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
               ${m.content?.trim() ? `<div class="msg-bubble"><div class="md-body">${renderMarkdown(m.content)}</div></div>` : ''}
               ${m === state.chat.at(-1) && canRetryChat(m) ? `<button type="button" class="btn btn-outline btn-sm" data-retry-chat>Erneut versuchen</button>` : ""}
               ${toolsHtml}
@@ -5981,13 +5992,7 @@
         if (copy) {
           const msg = state.chat.find(m => m.id === copy.dataset.copyMessage);
           if (!msg) return;
-          const content = String(msg.content ?? '');
-          const toolSteps = (msg.tool_calls || []).map(tc => {
-            const args = tc.rawArgs ?? JSON.stringify(tc.args ?? {}, null, 2);
-            const result = tc.result ?? tc.error ?? (tc.status === 'running' ? '(läuft noch)' : '(keine Antwort)');
-            return `Tool: ${tc.name}\nArgumente:\n${args}\nAntwort:\n${result}`;
-          });
-          const text = [content, ...toolSteps].filter(Boolean).join('\n\n');
+          const text = String(msg.content ?? '');
           // Copy rendered formatting without copying active elements or attributes.
           const rendered = copy.closest('.msg-row')?.querySelector('.msg-bubble > .md-body');
           const formatted = document.createElement('div');
@@ -6006,12 +6011,7 @@
             }
           }
           if (rendered) appendSafe(rendered, formatted);
-          else formatted.textContent = content;
-          for (const step of toolSteps) {
-            const pre = document.createElement('pre');
-            pre.textContent = step;
-            formatted.append(pre);
-          }
+          else formatted.textContent = text;
           try {
             if (typeof ClipboardItem === 'function' && navigator.clipboard?.write) {
               await navigator.clipboard.write([new ClipboardItem({
