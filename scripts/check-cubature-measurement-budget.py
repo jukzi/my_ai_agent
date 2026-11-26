@@ -14,6 +14,20 @@ def optimal_variances(weights, limit):
         counts[i] += 1
 
 
+def optimal_variances_dp(weights, limit):
+    """Independently minimize over all splits into positive measurement counts."""
+    best = {0: F(0)}
+    for weight in weights:
+        square = weight**2
+        costs = [F(0)] + [square / k for k in range(1, limit + 1)]
+        best = {
+            budget: min(previous + costs[budget - used]
+                        for used, previous in best.items() if used < budget)
+            for budget in range(min(best) + 1, limit + 1)
+        }
+    return best
+
+
 def main():
     single = [F(2, 7)] + [F(5, 36)] * 4 + [F(5, 63)] * 2
     direct = [F(2, 7)] + [F(5, 72)] * 8 + [F(5, 126)] * 4
@@ -27,6 +41,8 @@ def main():
         cutoff += 1
     a = dict(optimal_variances(single, cutoff - 1))
     b = dict(optimal_variances(direct, cutoff - 1))
+    assert a == optimal_variances_dp(single, cutoff - 1)
+    assert b == optimal_variances_dp(direct, cutoff - 1)
     delta = {n: choice + sigma2 * (a[n] - b[n]) for n in b}
     wins = [n for n, d in delta.items() if d < 0]
     ties = [n for n, d in delta.items() if d == 0]
