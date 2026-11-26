@@ -5089,7 +5089,7 @@
           const toolTime = durations.reduce((sum, ms) => sum + ms, 0);
           const badge = durations.length ? '<span class="response-time-badge" title="Summe der Laufzeiten der hier aufgelisteten Tools">◷ ' +
             (toolTime / 1000).toLocaleString('de-DE', {maximumFractionDigits: 3}) + ' s</span>' : '';
-          groups.push('<details class="agent-steps" data-group="' + escapeHtml(id) + '"' + (expanded.has(id) ? ' open' : '') + '><summary>' + escapeHtml(summary) + badge + '</summary>' + rows.slice(i,j-1).join('') + '</details>');
+          groups.push('<details class="agent-steps" data-group="' + escapeHtml(id) + '"' + (expanded.has(id) ? ' open' : '') + '><summary>' + escapeHtml(summary) + badge + (names.length ? ' <button type="button" class="btn btn-sm" data-copy-group="' + escapeHtml(id) + '">Tool-Schritte kopieren</button>' : '') + '</summary>' + rows.slice(i,j-1).join('') + '</details>');
         }
         groups.push(rows[j-1]);
         for (const preview of displays.slice(i,j).flat().filter(Boolean)) groups.push('<div class="msg-row assistant">'+preview+'</div>');
@@ -6094,11 +6094,23 @@
           await runAgentLoop();
           return;
         }
-        const copy = e.target.closest('[data-copy-message]');
+        const copy = e.target.closest('[data-copy-message], [data-copy-group]');
         if (copy) {
-          const msg = state.chat.find(m => m.id === copy.dataset.copyMessage);
+          const group = copy.hasAttribute('data-copy-group');
+          if (group) e.preventDefault();
+          const idx = state.chat.findIndex(m => String(m.id) === (group ? copy.dataset.copyGroup : copy.dataset.copyMessage));
+          const msg = state.chat[idx];
           if (!msg) return;
-          const text = String(msg.content ?? '');
+          let end = idx + 1;
+          if (group) while (state.chat[end]?.role === 'assistant') end++;
+          const content = group ? '' : String(msg.content ?? '');
+          const calls = group ? state.chat.slice(idx, end - 1).flatMap(m => m.tool_calls || []) : (msg.tool_calls || []);
+          const toolSteps = calls.map(tc => {
+            const args = tc.rawArgs ?? JSON.stringify(tc.args ?? {}, null, 2);
+            const result = tc.result ?? tc.error ?? (tc.status === 'running' ? '(läuft noch)' : '(keine Antwort)');
+            return `Tool: ${tc.name}\nArgumente:\n${args}\nAntwort:\n${result}`;
+          });
+          const text = [content, ...toolSteps].filter(Boolean).join('\n\n');
           // Copy rendered formatting without copying active elements or attributes.
           const rendered = copy.closest('.msg-row')?.querySelector('.msg-bubble > .md-body');
           const formatted = document.createElement('div');
@@ -6117,7 +6129,12 @@
             }
           }
           if (rendered) appendSafe(rendered, formatted);
-          else formatted.textContent = text;
+          else formatted.textContent = content;
+          for (const step of toolSteps) {
+            const pre = document.createElement('pre');
+            pre.textContent = step;
+            formatted.append(pre);
+          }
           try {
             if (typeof ClipboardItem === 'function' && navigator.clipboard?.write) {
               await navigator.clipboard.write([new ClipboardItem({
