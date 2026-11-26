@@ -1423,7 +1423,7 @@
             <button type="button" class="btn btn-sm btn-outline" id="importChat">Import</button>
             <input type="file" id="chatBackupFile" accept=".json,application/json" hidden />
           </div>
-          <div style="margin-top:8px"><span>Letzte API-Nutzlast: <strong id="lastPayload">–</strong> <button type="button" class="btn btn-sm btn-outline" id="summarizeChat">Zusammenfassen</button></span></div>
+          <div style="margin-top:8px"><span>Letzte API-Nutzlast: <strong id="lastPayload">–</strong> · Kontextlimit: <strong id="contextLimit" title="Kontextfenster des Modells; umfasst auch Platz für die Antwort">–</strong> <button type="button" class="btn btn-sm btn-outline" id="summarizeChat">Zusammenfassen</button></span></div>
         </div>
       </aside>
 
@@ -4432,16 +4432,29 @@
       if (chat === activeChat) { renderChat(); updateStorageMeter(); }
       return true;
     }
-    async function maybeSummarize(chat, tools, signal, status) {
-      if (summaryBoundary(chat.messages) < 0) return;
+    async function resolveContextLimit() {
       const base = (state.config.baseUrl || DEFAULT_CONFIG.baseUrl).replace(/\/+$/, '');
       const model = state.config.model || DEFAULT_CONFIG.model;
       let limit = state.config.contextLimits?.[JSON.stringify([base, model])];
-      if (!(limit > 0) && new URL(base, location.href).origin === 'https://openrouter.ai') {
+      if (!(limit > 0) && /^https:\/\/openrouter\.ai(?:\/|$)/i.test(base)) {
         limit = (await openRouterModel(model))?.contextLimit;
       }
+      return limit > 0 ? {limit, fallback: false} : {limit: 100_000, fallback: true};
+    }
+    let contextDisplayVersion = 0;
+    async function renderContextLimit() {
+      const version = ++contextDisplayVersion;
+      const label = $('#contextLimit');
+      label.textContent = '–';
+      const {limit, fallback} = await resolveContextLimit();
+      if (version === contextDisplayVersion) {
+        label.textContent = `${limit.toLocaleString('de-DE')} Tokens${fallback ? ' (Standardwert)' : ''}`;
+      }
+    }
+    async function maybeSummarize(chat, tools, signal, status) {
+      if (summaryBoundary(chat.messages) < 0) return;
+      const {limit} = await resolveContextLimit();
       signal.throwIfAborted();
-      if (!(limit > 0)) limit = 100_000;
       // Approximation: text and tool schemas, excluding base64 image data.
       const estimatedTokens = new TextEncoder().encode(serializeChatPayload(toolsFor(chat).buildApiMessages(false), tools)).length / 4;
       if (estimatedTokens <= limit / 2) return;
@@ -4845,6 +4858,7 @@
     }
 
     function renderTopbar() {
+      void renderContextLimit();
       renderUsage();
       $('#modelLabel').textContent = state.config.apiKey?.trim() && state.config.model?.trim() ? state.config.model : 'Einstellungen';
       const dot = $('#statusDot');
