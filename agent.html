@@ -1940,7 +1940,18 @@
       if (typeof program !== 'string' || program.length > 100000 || typeof query !== 'string' || !query.trim() || query.length > 10000) throw new Error('Ungültiges oder zu großes Prolog-Programm bzw. Ziel.');
       const workerSource = async ({data}) => {
         try {
-          importScripts('https://cdn.jsdelivr.net/npm/tau-prolog@0.3.4/modules/core.js');
+          self.window = self;
+          try {
+            importScripts('https://cdn.jsdelivr.net/npm/tau-prolog@0.3.4/modules/core.js');
+          } catch (error) {
+            if (error.name !== 'NetworkError') throw error;
+            try {
+              importScripts('https://unpkg.com/tau-prolog@0.3.4/modules/core.js');
+            } catch (fallbackError) {
+              if (fallbackError.name !== 'NetworkError') throw fallbackError;
+              throw new Error('Tau Prolog konnte von keinem der beiden CDNs geladen werden. Prüfe Netzwerkzugriff und Browser-Richtlinien.');
+            }
+          }
           const session = pl.create(100000);
           await new Promise((success, error) => session.consult(data.program, {success, error, file:false, url:false, html:false}));
           await new Promise((success, error) => session.query(data.query, {success, error}));
