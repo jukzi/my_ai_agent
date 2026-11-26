@@ -4166,6 +4166,11 @@
 
       text = escapeHtml(text);
 
+      const inlineCode = [];
+      text = text.replace(/(`+)([^\n]*?)\1(?!`)/g, (_, fence, content) => {
+        return `@@INLINECODE_${inlineCode.push(content) - 1}@@`;
+      });
+
       // Images ![alt](url)
       text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => {
         const safeUrl = url.replace(/&amp;/g, '&');
@@ -4175,8 +4180,6 @@
       // Links [text](url)
       text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 
-      // Inline code
-      text = text.replace(/`([^`\n]+)`/g, '<code>$1</code>');
 
       // Bold & italic
       text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -4252,6 +4255,8 @@
       closeLists();
 
       let html = out.join('\n');
+      html = html.replace(/@@INLINECODE_(\d+)@@/g, (marker, i) =>
+        inlineCode[i] === undefined ? marker : `<code>${inlineCode[i]}</code>`);
       html = html.replace(/@@CODEBLOCK_(\d+)@@/g, (_, i) => codeBlocks[Number(i)]);
       if (!math.length) return html;
       const token = new RegExp(marker + '([0-9]+)END', 'g');
