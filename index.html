@@ -1,34 +1,10 @@
 <!doctype html>
-<html lang="de">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kubatur: Numerisch integrieren in mehreren Dimensionen</title>
-  <style>
-    body { margin: 0; color: #17243a; background: #f6f8fc; font: 1.125rem/1.6 system-ui, sans-serif; }
-    main { max-width: 42rem; margin: auto; padding: 3rem 1.25rem; }
-    h1, h2 { line-height: 1.2; }
-    .label { color: #315da6; font-weight: bold; }
-    .example { background: white; border-inline-start: .25rem solid #315da6; padding: .5rem 1.25rem; }
-  </style>
-</head>
-<body>
-  <main>
-    <header>
-      <p class="label">Numerische Mathematik</p>
-      <h1>Was ist Kubatur?</h1>
-      <p>Kubatur (englisch: <i>cubature</i>) ist die numerische Näherung eines Integrals über ein Gebiet mit zwei oder mehr Dimensionen. Das eindimensionale Gegenstück heißt Quadratur.</p>
-    </header>
-    <section>
-      <h2>Die Grundidee</h2>
-      <p>Ist eine Funktion überall nichtnegativ, kann man ihr Integral über einer Fläche als Volumen unter ihrer Oberfläche verstehen. Eine Kubaturregel wertet die Funktion nur an ausgewählten Punkten, den Stützstellen, aus. Sie multipliziert jeden Funktionswert mit einem Gewicht und addiert die Ergebnisse.</p>
-    </section>
-    <section class="example">
-      <h2>Beispiel: Die Mittelpunktregel</h2>
-      <p>Wir integrieren <var>f</var>(<var>x</var>, <var>y</var>) = <var>x</var>² + <var>y</var>² über das Einheitsquadrat [0, 1] × [0, 1]. Die einfachste Mittelpunktregel verwendet nur den Punkt (½, ½). Sein Gewicht ist der Flächeninhalt des Quadrats, also 1.</p>
-      <p>Damit ergibt sich <strong>1 · (¼ + ¼) = ½</strong>. Der exakte Integralwert ist ⅔. Die Regel unterschätzt ihn hier also um ⅙.</p>
-      <p>Teilen wir das Quadrat in vier gleich große Teilquadrate und wenden die Mittelpunktregel auf jedes davon an, ergibt die Summe ⅝ – näher am exakten Wert.</p>
-    </section>
-  </main>
-</body>
-</html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Kubatur verständlich erklärt</title><style>body{margin:auto;max-width:48rem;padding:2rem 1rem;color:#17243a;background:#f6f8fc;font:1.1rem/1.65 system-ui,sans-serif}h1,h2{line-height:1.2}section{margin-block:2rem}a{color:#174782}blockquote{border-left:.25rem solid #315da6;margin-left:0;padding-left:1rem}table{border-collapse:collapse}td,th{padding:.35rem .65rem;border:1px solid #aeb9ca}</style></head><body><main>
+<h1>Kubatur: Wie berechnet man ein Integral mit wenigen Messpunkten?</h1>
+<p>Stell dir eine Landschaft vor, deren Höhe du an jedem beliebigen Ort messen kannst. Wie viel Erde liegt über einer ebenen Grundfläche? Statt überall zu messen, zerlegst du die Fläche in Stücke und schätzt das Volumen über jedem Stück: Grundfläche mal gemessene Höhe. Das ist die Idee der Mittelpunktregel, einer einfachen Kubaturregel.</p>
+<section><h2>Von der Quadratur zur Kubatur</h2><p>Quadratur ist numerische Integration in einer Dimension. Kubatur verallgemeinert sie auf mehrere Dimensionen. Ist die Höhe negativ, trägt der entsprechende Bereich negativ zum Integral bei: Das Integral ist dann kein gewöhnliches Volumen, sondern eine vorzeichenbehaftete Bilanz.</p>
+<p><strong>Allgemeine Regel:</strong> <var>Q</var> = ∑<sub><var>i</var>=1</sub><sup><var>N</var></sup> <var>w</var><sub><var>i</var></sub> · <var>f</var>(<var>P</var><sub><var>i</var></sub>).</p><dl><dt><var>Q</var></dt><dd>Der berechnete Näherungswert.</dd><dt>∑</dt><dd>Summenzeichen: Addiere einen Beitrag pro Punkt. Der Laufindex <var>i</var> zählt von 1 bis <var>N</var>, der Anzahl der Punkte.</dd><dt><var>P</var><sub><var>i</var></sub>, <var>f</var>(<var>P</var><sub><var>i</var></sub>)</dt><dd>Der Punkt mit Nummer <var>i</var> und der Wert der Funktion <var>f</var> an diesem Punkt.</dd><dt><var>w</var><sub><var>i</var></sub>, ·</dt><dd>Das Gewicht dieses Punkts; der Mittelpunkt · steht für Multiplikation.</dd></dl>
+<p>Ein erster Test: Setze die Höhe überall auf 1. Soll die Regel dann exakt sein, muss die Summe ihrer Gewichte gleich dem Flächeninhalt des Gebiets sein. Das ist notwendig, aber kein Beweis für Genauigkeit bei anderen Funktionen.</p></section>
+<section><h2>Rechenbeispiel: Ein Punkt oder vier?</h2><p>Die Höhe sei <var>f</var>(<var>x</var>, <var>y</var>) = <var>x</var>² + <var>y</var>². Dabei sind <var>x</var> und <var>y</var> die waagerechte und senkrechte Koordinate in der Grundfläche; ² bedeutet „mit sich selbst multiplizieren“. Beide Koordinaten laufen unabhängig von 0 bis 1. So entsteht das Einheitsquadrat.</p><p>Der Mittelpunkt hat die Koordinaten (½, ½) und die Höhe ½. Mit Grundfläche 1 ergibt das den Näherungswert ½. Bei vier gleich großen Teilquadraten sind die Höhen ⅛, ⅝, ⅝ und 9/8. Jede Höhe zählt mit Gewicht ¼. Zusammen ergibt das ⅝.</p><p>Der exakte Wert ist ⅔. Denn <var>x</var>³/3 ist eine Stammfunktion von <var>x</var>²; Einsetzen von 1 und 0 und Subtrahieren ergibt ⅓. Das Stück in der anderen Richtung hat Breite 1, also bleibt der Beitrag ⅓. Der Anteil von <var>y</var>² liefert genauso viel. Die Hochzahl 3 bezeichnet die dritte Potenz; der Schrägstrich bedeutet Division.</p></section>
+<section><h2>Quellen und Lesetipps</h2><ol><li id="nist">NIST, <cite>Digital Library of Mathematical Functions</cite>, <a href="https://dlmf.nist.gov/3.5#x">Abschnitt 3.5(x): Cubature Formulas</a>. Fachreferenz zur Einordnung; <a href="https://dlmf.nist.gov/3.5#iv">Abschnitt 3.5(iv)</a> erklärt eindimensionale Ausgangsregeln.</li></ol></section>
+</main></body></html>
