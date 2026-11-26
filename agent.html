@@ -2908,8 +2908,9 @@
             } else {
               const bytes = FS.readFile(full);
               const mime = guessMime(relPath);
-              const isImgBin = isImageFile(relPath, mime) && mime !== 'image/svg+xml';
-              if (isImgBin) {
+              const isBinary = state.workspace[relPath]?.isBinary || /\.(zip|whl)$/i.test(relPath) ||
+                (isImageFile(relPath, mime) && mime !== 'image/svg+xml');
+              if (isBinary) {
                 let bin = '';
                 for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
                 const dataUrl = `data:${mime};base64,${btoa(bin)}`;
