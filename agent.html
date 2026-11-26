@@ -2579,7 +2579,7 @@
     /* =========================================================================
        6. OPTIONAL RUNTIMES: PYTHON (PYODIDE), JAVASCRIPT, JAVA, GITHUB
        ========================================================================= */
-    async function ensurePyodide(onFallback) {
+    async function ensurePyodide() {
       if (state.pyodide) return state.pyodide;
       if (state.pyodideLoading) return state.pyodideLoading;
       state.pyodideLoading = (async () => {
@@ -2595,7 +2595,6 @@
         }
         const startupErrors = [];
         let py;
-        let fallbackNotice = '';
         try {
           const indexURL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
           let archive;
@@ -2609,10 +2608,9 @@
                 throw new Error('Antwort ist kein ZIP-Archiv');
               }
               archive = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
-              if (failures.length) fallbackNotice = `Python-Standardbibliothek über Ersatz-URL geladen: ${url}`;
               break;
             } catch (error) {
-              failures.push(`${url}: ${error.name}: ${error.message}`);
+              failures.push(url + ': ' + error.message);
             }
           }
           if (!archive) throw new Error('Python-Standardbibliothek konnte nicht geladen werden: ' + failures.join('; '));
@@ -2633,8 +2631,7 @@
           throw new Error('Python konnte nicht initialisiert werden: ' + (error?.message || String(error)) + (detail ? '\n' + detail : ''), { cause: error });
         }
         state.pyodide = py;
-        if (fallbackNotice) onFallback(fallbackNotice);
-        toast(fallbackNotice || 'Python (Pyodide) bereit!', 'success');
+        toast('Python (Pyodide) bereit!', 'success');
         return py;
       })();
       try {
@@ -2646,39 +2643,9 @@
     }
 
     async function runPython(code, packages = []) {
-      let startupNotice = '';
-      const py = await ensurePyodide(notice => { startupNotice = notice; });
+      const py = await ensurePyodide();
       if (Array.isArray(packages) && packages.length) {
-        const started = performance.now();
-        const messages = [];
-        const failures = [];
-        // Pyodide can report an individual failure without rejecting loadPackage.
-        const sanitize = (message) => String(message).replace(/https?:\/\/[^\s<>"']+/gi, raw => {
-          try {
-            const url = new URL(raw);
-            return url.origin + url.pathname;
-          } catch { return '[URL]'; }
-        }).slice(0, 500);
-        try {
-          await py.loadPackage(packages, {
-            messageCallback: message => messages.push(sanitize(message)),
-            errorCallback: message => failures.push(sanitize(message)),
-          });
-        } catch (error) {
-          failures.push(sanitize(error?.message || error));
-        }
-        const missing = packages.filter(name => /^[\w-]+$/.test(name) &&
-          !Object.hasOwn(py.loadedPackages, name.toLowerCase().replace(/_/g, '-')));
-        if (failures.length || missing.length) {
-          throw new Error('Pyodide-Paketladen fehlgeschlagen: ' + JSON.stringify({
-            phase: 'loadPackage',
-            packages: packages.map(sanitize),
-            missing,
-            durationMs: Math.round(performance.now() - started),
-            messages: messages.slice(-12),
-            errors: failures.slice(-12),
-          }));
-        }
+        await py.loadPackage(packages);
       }
 
       // Sync VFS -> Pyodide /workspace
@@ -2752,8 +2719,8 @@
       }
 
       const out = logs.join('\n');
-      if (out && resultVal) return [startupNotice, `${out}\n=> ${resultVal}`].filter(Boolean).join('\n');
-      return [startupNotice, out || resultVal || '(Ausführung ohne Ausgabe abgeschlossen)'].filter(Boolean).join('\n');
+      if (out && resultVal) return `${out}\n=> ${resultVal}`;
+      return out || resultVal || '(Ausführung ohne Ausgabe abgeschlossen)';
     }
 
     async function runJavaScript(code) {
@@ -2771,7 +2738,17 @@
         const value = await (async () => {\n${code}\n})();
         return {logs, changes, value};
       }`};
-      const result = JSON.parse(await runCustom(tool, {files}, ''));
+      let rawResult;
+      try {
+        rawResult = await runCustom(tool, {files}, '');
+      } catch (error) {
+        const message = String(error?.message ?? error);
+        if (/blocked by CSP|content security policy|unsafe-eval/i.test(message)) {
+          throw new Error('CSP-Hinweis: Dynamische Codeauswertung ist nicht erlaubt. Testcode direkt übergeben, ohne eval() oder new Function(). Originalmeldung: ' + message, { cause: error });
+        }
+        throw error;
+      }
+      const result = JSON.parse(rawResult);
       if (!Array.isArray(result?.changes) || result.changes.length > 100) throw new Error('Ungültige Workspace-Änderungen.');
       const enabled = new Set(getActiveToolDefinitions().map(tool => tool.function.name));
       for (const change of result.changes) {
@@ -3451,7 +3428,7 @@
           type: 'function',
           function: {
             name: 'RunJavaScript',
-            description: 'Führt JavaScript-Code in einer Browser-Sandbox aus. Verfügbar: console.log und workspace.{list,read,write,delete}.',
+            description: 'Führt direkt übergebenen JavaScript-Code in einer Browser-Sandbox aus. Die CSP blockiert eval() und new Function(); workspace.read liest Dateien nur als Text. Verfügbar: console.log und workspace.{list,read,write,delete}.',
             parameters: {
               type: 'object',
               properties: {
