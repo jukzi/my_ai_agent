@@ -1442,7 +1442,8 @@
                 placeholder="Nachricht eingeben… (Enter zum Senden, Shift+Enter für Zeilenumbruch, Bilder einfügen per Strg+V)"
               ></textarea>
               <button class="btn btn-primary" id="btnSend">Senden</button>
-              <button class="btn btn-danger" id="btnStop" style="display:none;">Stopp</button>
+              <button class="btn" id="btnContinue" title="Automatisch weiterarbeiten bis Stopp (ohne Schrittlimit; laufende API-Kosten)" aria-label="Automatisch weiterarbeiten">&gt;&gt;</button>
+               <button class="btn btn-danger" id="btnStop" style="display:none;">Stopp</button>
             </div>
           </div>
           <div class="composer-hint">
@@ -4409,7 +4410,15 @@
       return data;
     }
 
-    async function runAgentLoop(chat = activeChat) {
+    function appendContinuation(chat) {
+      chat.messages.push({id: uid('msg'), role: 'user',
+        content: 'Arbeite an der bisherigen Aufgabe weiter. Führe den nächsten sinnvollen Schritt aus.',
+        timestamp: Date.now()});
+      saveChat();
+      if (chat === activeChat) renderChat();
+    }
+
+    async function runAgentLoop(chat = activeChat, continuous = false) {
       if (runs.has(chat) || state.isRunning) return;
       const {executeTool, getActiveToolDefinitions, buildApiMessages} = toolsFor(chat);
       const controller = new AbortController();
@@ -4443,9 +4452,10 @@
       let includeImages = true;
 
       try {
-        for (let step = 1; step <= maxSteps; step++) {
+        for (let step = 1; (continuous || step <= maxSteps); step++) {
           if (controller.signal.aborted) break;
-          status(`Schritt ${step}/${maxSteps} · Warte auf ${state.config.model}…`);
+          const progress = continuous ? `Automatisch · Schritt ${step}` : `Schritt ${step}/${maxSteps}`;
+          status(`${progress} · Warte auf ${state.config.model}…`);
 
           const tools = getActiveToolDefinitions();
           let data;
@@ -4462,6 +4472,7 @@
             }
           }
 
+          controller.signal.throwIfAborted();
           const choice = data?.choices?.[0];
           const msg = choice?.message;
           if (!msg) throw new Error('Leere Antwort vom API-Provider erhalten.');
@@ -4500,7 +4511,9 @@
           if (chat === activeChat) renderChat();
 
           if (!assistantEntry.tool_calls.length) {
-            break; // Final answer reached
+            if (!continuous || controller.signal.aborted) break;
+            appendContinuation(chat);
+            continue;
           }
 
           // Execute each tool call
@@ -4508,7 +4521,7 @@
             if (controller.signal.aborted) break;
             const path = typeof tc.args?.path === 'string' ? ' „' + tc.args.path.slice(0, 100) + '“' : '';
             const labels = {Read:'Lese Datei', Write:'Schreibe Datei', Edit:'Bearbeite Datei', MultiEdit:'Bearbeite Datei', Delete:'Lösche Datei', Grep:'Durchsuche Workspace', Glob:'Suche Dateien', LS:'Liste Dateien', RunPython:'Starte Python-Code', RunJavaScript:'Führe JavaScript aus', WebFetch:'Lade Webseite', JinaReader:'Lade Webseiteninhalt'};
-            status('Schritt ' + step + '/' + maxSteps + ' · ' + (Object.hasOwn(labels, tc.name) ? labels[tc.name] + path : 'Führe ' + tc.name + ' aus') + '…');
+            status(progress + ' · ' + (Object.hasOwn(labels, tc.name) ? labels[tc.name] + path : 'Führe ' + tc.name + ' aus') + '…');
             const t0 = performance.now();
             try {
               const execute = () => executeTool(tc.name, privateArgs.get(tc.id) ?? tc.args);
@@ -4739,6 +4752,7 @@
 
     function updateRunningUI(running, text) {
       $('#btnSend').style.display = running ? 'none' : 'inline-flex';
+      $('#btnContinue').style.display = running ? 'none' : 'inline-flex';
       $('#btnStop').style.display = running ? 'inline-flex' : 'none';
       $('#agentStatusText').textContent = text;
       const dot = $('#statusDot');
@@ -5141,13 +5155,18 @@
     /* =========================================================================
        13. SEND MESSAGE FLOW
        ========================================================================= */
-    async function sendUserMessage(overrideText = null) {
+    async function sendUserMessage(overrideText = null, continuous = false) {
       if (state.isRunning || runs.has(activeChat)) return;
       const input = $('#chatInput');
       const text = overrideText !== null ? overrideText.trim() : input.value.trim();
       const atts = [...state.pendingAttachments];
 
-      if (!text && !atts.length) return;
+      if (!text && !atts.length) {
+        if (!continuous || !activeChat.messages.length) return;
+        appendContinuation(activeChat);
+        await runAgentLoop(activeChat, true);
+        return;
+      }
 
       // Also save uploaded chat files into /uploads/ so agent tools can inspect/edit them
       const savedAtts = [];
@@ -5181,7 +5200,7 @@
       saveChat();
       renderChat();
 
-      await runAgentLoop();
+      await runAgentLoop(activeChat, continuous);
     }
 
     /* =========================================================================
@@ -5916,6 +5935,7 @@
         }
       });
 
+      $('#btnContinue').addEventListener('click', () => { historyIndex = -1; sendUserMessage(null, true); });
       $('#btnSend').addEventListener('click', () => { historyIndex = -1; sendUserMessage(); });
       $('#btnNewChat').addEventListener('click', () => { historyIndex = -1; });
       $('#btnStop').addEventListener('click', () => (runs.get(activeChat)?.controller || state.abortController)?.abort());
