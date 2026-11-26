@@ -43,6 +43,88 @@ jobs:
           PY
       - name: Verify SHA-256
         run: printf '%s  %s\n' "$SHA" "$WHEEL" | sha256sum --check
+      - name: Compress and split verified wheel
+        run: gzip -c "$WHEEL" | split -b 2M -d -a 3 - scipy-part-
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-000
+          path: scipy-part-000
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-001
+          path: scipy-part-001
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-002
+          path: scipy-part-002
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-003
+          path: scipy-part-003
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-004
+          path: scipy-part-004
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-005
+          path: scipy-part-005
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-006
+          path: scipy-part-006
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-007
+          path: scipy-part-007
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-008
+          path: scipy-part-008
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-009
+          path: scipy-part-009
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-010
+          path: scipy-part-010
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-011
+          path: scipy-part-011
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-012
+          path: scipy-part-012
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-013
+          path: scipy-part-013
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-014
+          path: scipy-part-014
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scipy-part-015
+          path: scipy-part-015
+          if-no-files-found: ignore
       - name: Run Cubature solver with native SciPy
         run: |
           set -euo pipefail
