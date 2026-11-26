@@ -43,6 +43,17 @@ jobs:
           PY
       - name: Verify SHA-256
         run: printf '%s  %s\n' "$SHA" "$WHEEL" | sha256sum --check
+      - name: Run Cubature solver with native SciPy
+        run: |
+          set -euo pipefail
+          python3 -m venv cubature-venv
+          cubature-venv/bin/python -m pip --disable-pip-version-check install numpy scipy
+          curl -fsSL --max-time 20 -o cubature_generic.py https://raw.githubusercontent.com/jukzi/cubature_atlas/762caf71789f7907fb378226a9bda0d10b1e7f18/code/cubature_generic.py
+          cubature-venv/bin/python cubature_generic.py --out cubature_result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cubature-result
+          path: cubature_result.json
       - uses: actions/upload-artifact@v4
         with:
           name: verified-scipy-wheel
