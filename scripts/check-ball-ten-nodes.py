@@ -11,7 +11,7 @@ def dot(u, v):
 
 def kernel(u, v):
     a, b, t = dot(u, u), dot(v, v), dot(u, v)
-    return 1 + 5*t + F(175, 12)*(a-F(3, 5))*(b-F(3, 5)) + F(35, 2)*(t*t-a*b/3)
+    return 1 + 5*t + F(175, 12)*(a-F(3, 5))*(b-F(3, 5)) + F(35, 2)*(t*t-F(1, 3)*a*b)
 
 
 def main():
