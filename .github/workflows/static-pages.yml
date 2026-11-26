@@ -24,17 +24,19 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          persist-credentials: false
-      - name: Stage static site
+      - name: Stage static site from the triggering commit
         run: |
           mkdir -p _site
-          cp agent.html _site/agent.html
+          curl --fail --silent --show-error --retry 2 --max-time 20 \
+            --header 'Accept: application/vnd.github.raw+json' \
+            --output _site/agent.html \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/contents/agent.html?ref=$GITHUB_SHA"
+          test -s _site/agent.html
           printf '%s\n' '<!doctype html><meta charset="utf-8"><title>MyAiAgent</title><meta http-equiv="refresh" content="0; url=agent.html"><a href="agent.html">MyAiAgent öffnen</a>' > _site/index.html
-          cmp agent.html _site/agent.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
       - uses: actions/deploy-pages@v4
         id: deployment
+        with:
+          reporting_interval: 1000
