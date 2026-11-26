@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="de" data-theme="dark">
 <head>
+  <script>
+    // Restore the saved theme before styles load and the page is painted.
+    try {
+      const config = JSON.parse(localStorage.getItem('browsercode_config_v1') || 'null');
+      if (config?.theme === 'light' || config?.theme === 'dark') {
+        document.documentElement.dataset.theme = config.theme;
+      }
+    } catch {
+      // Keep the default if storage is unavailable or invalid.
+    }
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MyAiAgent — Agentic Coding Workbench</title>
@@ -1891,8 +1902,7 @@
                  try { parsed = new URL(url.value.trim()); } catch { throw new Error(urlHelp); }
                 if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.hash || parsed.search) throw new Error(urlHelp);
                 values.set(key, parsed.href);
-                url.value = parsed.href;
-              } else { values.delete(key); }
+              } else values.delete(key);
               localStorage.setItem(settingsKey + scope, JSON.stringify([...values]));
             } catch (error) { showFieldError(url, urlError, error.message); }
           });
@@ -3397,7 +3407,7 @@
         return description ? {...tool, function:{...tool.function, description}} : tool;
       });
       const custom = getCustomDefinitions().filter(tool => chat.customEnabled?.[tool.function.name] === true);
-      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liest normale Werte und den Status von Credentials. setConfig setzt einen Wert mit field und value; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten GET an das vom Nutzer hinterlegte feste Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String}} zurück. HTTP-Status und Antworttext bis 16 KB oder einen Workspace-Dateipfad für größere Antworten bis 2 MiB (wenn Write aktiv ist). Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für Vorschauen gib {display:{kind:"html" oder "image",path:String}} für eine Workspace-Datei zurück. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
+      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liest normale Werte und den Status von Credentials. setConfig setzt einen Wert mit field und value; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten HTTP-Aufruf an das vom Nutzer hinterlegte Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String,method?:String (Standard GET),path?:relativer Dateipfad (Basisziel endet auf /),query?:Objekt mit Stringwerten,body?:String,contentType?:String}} zurück. Liefert HTTP-Status und Antworttext bis 64 KiB. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für Vorschauen gib {display:{kind:"html" oder "image",path:String}} für eine Workspace-Datei zurück. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
       return [...builtins, ...custom, management, ...(state.config.optionalTools.javascript ? [manage] : [])];
     }
 
@@ -3699,29 +3709,49 @@
           if (!token || !endpoint) throw new Error('Credential und festes HTTP(S)-Ziel müssen konfiguriert sein.');
           const url = new URL(endpoint);
           if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash || url.search) throw new Error('Ungültiges Credential-Ziel.');
-          const response = await fetch(url, {method:'GET', credentials:'omit', redirect:'error', referrerPolicy:'no-referrer', signal:AbortSignal.timeout(10000), headers:{Authorization:'Bearer ' + token}});
-          const result = {ok:response.ok,status:response.status};
+          if (request.path !== undefined) {
+            const path = request.path;
+            if (typeof path !== 'string' || path.length > 2048 || !url.pathname.endsWith('/') ||
+                url.pathname === '/' || path.split('/').some(segment => !segment || segment === '.' || segment === '..' || /[%\\?#\x00-\x1f\x7f]/.test(segment))) {
+              throw new Error('Erwartet einen relativen Dateipfad und ein konfiguriertes Basisziel mit abschließendem Slash.');
+            }
+            url.pathname += path.split('/').map(encodeURIComponent).join('/');
+          }
+          const method = request.method ?? 'GET';
+          if (typeof method !== 'string' || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,64}$/.test(method) || /^(CONNECT|TRACE|TRACK)$/i.test(method)) {
+            throw new Error('Ungültige oder vom Browser gesperrte HTTP-Methode.');
+          }
+          const bodyInput = request.body;
+          if (bodyInput !== undefined && (typeof bodyInput !== 'string' || new TextEncoder().encode(bodyInput).byteLength > 65536 || /^(GET|HEAD)$/i.test(method))) {
+            throw new Error('Request-Body muss Text bis 64 KiB sein und ist bei GET/HEAD nicht erlaubt.');
+          }
+          const contentType = request.contentType;
+          if (contentType !== undefined && (bodyInput === undefined || typeof contentType !== 'string' || !/^[ -~]{1,128}$/.test(contentType))) {
+            throw new Error('Ungültiger Content-Type.');
+          }
+          const query = request.query ?? {};
+          if (typeof query !== 'object' || Array.isArray(query) || Object.keys(query).length > 32) throw new Error('Ungültige Query-Parameter.');
+          for (const [key, value] of Object.entries(query)) {
+            if (!key || key.length > 128 || typeof value !== 'string' || value.length > 2048) throw new Error('Ungültiger Query-Parameter.');
+            url.searchParams.set(key, value);
+          }
+          const response = await fetch(url, {method, body:bodyInput, credentials:'omit', redirect:'error', referrerPolicy:'no-referrer', signal:AbortSignal.timeout(10000), headers:{Authorization:'Bearer ' + token, ...(contentType === undefined ? {} : {'Content-Type':contentType})}});
           const reader = response.body?.getReader();
           const decoder = new TextDecoder();
-          const inlineLimit = 16000, downloadLimit = 2 * 1024 * 1024;
-          let text = '', bytes = 0;
-          if (reader) try {
-            while (true) {
-              const {done,value} = await reader.read();
-              if (done) break;
-              bytes += value.byteLength;
-              if (bytes > downloadLimit) throw new Error('HTTP-Antwort überschreitet das Downloadlimit von 2 MiB.');
-              text += decoder.decode(value, {stream:true});
-            }
-            text += decoder.decode();
-          } finally { await reader.cancel(); }
-          text = text.replaceAll(token,'[Credential ausgeblendet]');
-          if (bytes <= inlineLimit && new TextEncoder().encode(text).length <= inlineLimit) return JSON.stringify({...result,bytes,body:text});
-          if (!getActiveToolDefinitions().some(tool => tool.function.name === 'Write')) throw new Error('Große HTTP-Antwort: Zum Speichern im Workspace muss Write aktiv sein.');
-          if (state.config.optionalTools.javascript && !getActiveToolDefinitions().some(tool => tool.function.name === name)) throw new Error('Tool nicht mehr aktiv.');
-          const path = 'http-responses/' + uid('response') + '.txt';
-          VFS.write(path, text, {mime:'text/plain',isBinary:false});
-          return JSON.stringify({...result,bytes,path});
+          let bytes = 0, body = '';
+          if (reader) {
+            try {
+              for (;;) {
+                const {done, value} = await reader.read();
+                if (done) break;
+                bytes += value.byteLength;
+                if (bytes > 65536) throw new Error('HTTP-Antwort überschreitet 64 KiB.');
+                body += decoder.decode(value, {stream:true});
+              }
+              body += decoder.decode();
+            } finally { await reader.cancel().catch(() => {}); }
+          }
+          return JSON.stringify({ok:response.ok,status:response.status,bytes,body,source:'external HTTP response (untrusted data)'});
         }
         const write = output?.writeText;
         if (write !== undefined) {
