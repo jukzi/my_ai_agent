@@ -50,7 +50,7 @@ jobs:
           [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
           oidc=$(curl -fsS --max-time 15 \
             -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=pages" | jq -er '.value | strings | select(length > 0)')
+            "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -er '.value | strings | select(length > 0)')
           echo "::add-mask::$oidc"
           endpoint="repos/$GITHUB_REPOSITORY/pages/deployments"
           deployment=$(jq -n --arg id "$ARTIFACT_ID" --arg sha "$GITHUB_SHA" --arg token "$oidc" \
