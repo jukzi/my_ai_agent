@@ -23,7 +23,7 @@ jobs:
       - name: Download wheel from CDN
         id: cdn
         continue-on-error: true
-        run: curl -fsSL --max-time 60 --max-filesize 33554432 -o "$WHEEL" "$BASE/$WHEEL"
+        run: curl -fsSL --max-time 60 --max-filesize 134217728 -o "$WHEEL" "$BASE/$WHEEL"
       - name: Extract wheel from official release archive
         if: steps.cdn.outcome == 'failure'
         run: |
@@ -35,7 +35,7 @@ jobs:
           with tarfile.open('release.tar.bz2', 'r|bz2') as archive:
               for member in archive:
                   if member.isfile() and pathlib.PurePosixPath(member.name).name == name:
-                      if member.size > 32 * 1024 * 1024:
+                      if member.size > 128 * 1024 * 1024:
                           raise ValueError('Wheel exceeds size limit')
                       with archive.extractfile(member) as source, open(name, 'wb') as output:
                           shutil.copyfileobj(source, output)
