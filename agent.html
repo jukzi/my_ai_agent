@@ -5083,7 +5083,13 @@
           const names = state.chat.slice(i, j - 1).flatMap(m => (m.tool_calls || []).map(tc => tc.name));
           const listed = names.length > 10 ? [...names.slice(0, 5), '…', ...names.slice(-5)] : names;
           const summary = names.length ? 'Schritte (' + names.length + '): ' + listed.join(', ') : 'Frühere Agentenschritte (' + (j - i - 1) + ')';
-          groups.push('<details class="agent-steps" data-group="' + escapeHtml(id) + '"' + (expanded.has(id) ? ' open' : '') + '><summary>' + escapeHtml(summary) + '</summary>' + rows.slice(i,j-1).join('') + '</details>');
+          const durations = state.chat.slice(i, j - 1).flatMap(m => (m.tool_calls || [])
+            .filter(tc => tc.status !== 'running' && Number.isFinite(tc.durationMs))
+            .map(tc => tc.durationMs));
+          const toolTime = durations.reduce((sum, ms) => sum + ms, 0);
+          const badge = durations.length ? '<span class="response-time-badge" title="Summe der Laufzeiten der hier aufgelisteten Tools">◷ ' +
+            (toolTime / 1000).toLocaleString('de-DE', {maximumFractionDigits: 3}) + ' s</span>' : '';
+          groups.push('<details class="agent-steps" data-group="' + escapeHtml(id) + '"' + (expanded.has(id) ? ' open' : '') + '><summary>' + escapeHtml(summary) + badge + '</summary>' + rows.slice(i,j-1).join('') + '</details>');
         }
         groups.push(rows[j-1]);
         for (const preview of displays.slice(i,j).flat().filter(Boolean)) groups.push('<div class="msg-row assistant">'+preview+'</div>');
