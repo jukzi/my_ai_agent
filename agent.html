@@ -1505,7 +1505,7 @@
           <div class="field-hint">Optionale Schätzpreise für die aktuell eingetragene API-URL und das Modell. Leer = bei OpenRouter automatisch aus der Modellliste, sonst unbekannt.</div>
           <div class="field-row">
             <div class="field">
-              <label for="cfgContextLimit">Kontextlimit (Tokens, leer = automatisch)</label>
+              <label for="cfgContextLimit">Kontextlimit (Tokens, leer = automatisch oder 8192)</label>
               <input type="number" id="cfgContextLimit" min="1" step="1" />
               <label for="cfgMaxSteps">Max. Agent-Schritte</label>
               <input type="number" id="cfgMaxSteps" min="1" max="50" value="20" />
@@ -4425,7 +4425,7 @@
         limit = (await openRouterModel(model))?.contextLimit;
       }
       signal.throwIfAborted();
-      if (!(limit > 0)) return;
+      if (!(limit > 0)) limit = 8192; // Conservative fallback for unknown context windows.
       // Approximation: text and tool schemas, excluding base64 image data.
       const estimatedTokens = new TextEncoder().encode(serializeChatPayload(toolsFor(chat).buildApiMessages(false), tools)).length / 4;
       if (estimatedTokens <= limit / 2) return;
