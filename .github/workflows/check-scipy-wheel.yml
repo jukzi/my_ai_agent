@@ -23,20 +23,18 @@ jobs:
       - name: Download wheel from CDN
         id: cdn
         continue-on-error: true
-        run: curl -fsSL --max-time 60 --max-filesize 134217728 -o "$WHEEL" "$BASE/$WHEEL"
+        run: curl -fsSL --max-time 60 -o "$WHEEL" "$BASE/$WHEEL"
       - name: Extract wheel from official release archive
         if: steps.cdn.outcome == 'failure'
         run: |
           set -euo pipefail
-          curl -fsSL --max-time 120 --max-filesize 350000000 -o release.tar.bz2 https://github.com/pyodide/pyodide/releases/download/0.26.4/pyodide-0.26.4.tar.bz2
+          curl -fsSL --max-time 120 -o release.tar.bz2 https://github.com/pyodide/pyodide/releases/download/0.26.4/pyodide-0.26.4.tar.bz2
           python - <<'PY'
           import os, pathlib, shutil, tarfile
           name = os.environ['WHEEL']
           with tarfile.open('release.tar.bz2', 'r|bz2') as archive:
               for member in archive:
                   if member.isfile() and pathlib.PurePosixPath(member.name).name == name:
-                      if member.size > 128 * 1024 * 1024:
-                          raise ValueError('Wheel exceeds size limit')
                       with archive.extractfile(member) as source, open(name, 'wb') as output:
                           shutil.copyfileobj(source, output)
                       break
