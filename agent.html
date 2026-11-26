@@ -2596,7 +2596,7 @@
         const startupErrors = [];
         let py;
         try {
-          const indexURL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
+          const indexURL = pyodideIndexURL;
           let archive;
           const failures = [];
           for (const url of [indexURL + 'python_stdlib.zip', 'https://cdn.jsdelivr.net/npm/pyodide@0.26.4/python_stdlib.zip']) {
@@ -2642,6 +2642,52 @@
       }
     }
 
+    const pyodideIndexURL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
+
+    async function probePyodideWheel(name) {
+      const report = { package: name, phase: 'manifest', status: null, bytes: 0 };
+      const started = performance.now();
+      const signal = AbortSignal.timeout(15000);
+      const options = { signal, credentials: 'omit', cache: 'no-store' };
+      try {
+        const manifest = await fetch(pyodideIndexURL + 'pyodide-lock.json', options);
+        if (!manifest.ok) throw new Error('Manifest HTTP ' + manifest.status);
+        const packages = (await manifest.json()).packages;
+        const key = name.toLowerCase().replace(/_/g, '-');
+        const entry = Object.hasOwn(packages, key) ? packages[key] : null;
+        if (!entry || !/^[\w.-]+\.whl$/.test(entry.file_name) || !/^[a-f0-9]{64}$/i.test(entry.sha256)) {
+          throw new Error('Kein Wheel mit SHA-256 im Manifest');
+        }
+        report.url = pyodideIndexURL + entry.file_name;
+        report.phase = 'headers';
+        const response = await fetch(report.url, options);
+        report.status = response.status;
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        report.phase = 'body';
+        const reader = response.body.getReader();
+        const chunks = [];
+        for (;;) {
+          const {done, value} = await reader.read();
+          if (done) break;
+          report.bytes += value.byteLength;
+          if (report.bytes > 32 * 1024 * 1024) {
+            await reader.cancel();
+            throw new Error('Diagnosegrenze von 32 MiB überschritten');
+          }
+          chunks.push(value);
+        }
+        report.phase = 'integrity';
+        const digest = await crypto.subtle.digest('SHA-256', await new Blob(chunks).arrayBuffer());
+        const actual = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+        if (actual !== entry.sha256.toLowerCase()) throw new Error('SHA-256 stimmt nicht mit dem Manifest überein');
+        report.phase = 'verified';
+      } catch (error) {
+        report.error = signal.aborted ? 'Zeitlimit der Abrufdiagnose erreicht' : String(error?.message ?? error).slice(0, 300);
+      }
+      report.durationMs = Math.round(performance.now() - started);
+      return report;
+    }
+
     async function runPython(code, packages = []) {
       const py = await ensurePyodide();
       if (Array.isArray(packages) && packages.length) {
@@ -2666,11 +2712,15 @@
         const missing = packages.filter(name => /^[\w-]+$/.test(name) &&
           !Object.hasOwn(py.loadedPackages, name.toLowerCase().replace(/_/g, '-')));
         if (failures.length || missing.length) {
+          const durationMs = Math.round(performance.now() - started);
+          const transferProbe = missing.length && failures.some(message => /networkerror|failed to fetch|load failed/i.test(message))
+            ? await probePyodideWheel(missing[0]) : undefined;
           throw new Error('Pyodide-Paketladen fehlgeschlagen: ' + JSON.stringify({
             phase: 'loadPackage',
             packages: packages.map(sanitize),
             missing,
-            durationMs: Math.round(performance.now() - started),
+            durationMs,
+            transferProbe,
             messages: messages.slice(-12),
             errors: failures.slice(-12),
           }));
