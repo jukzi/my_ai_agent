@@ -34,10 +34,11 @@ def main():
     sigma2 = F(1, 50)**2
     choice = F(1, 2160)**2
     assert sum(single) == sum(direct) == 1
-    # This upper bound on the direct plan's excess measurement variance
-    # decreases for every subsequent budget.
-    cutoff = len(direct) + 1
-    while len(direct) * sigma2 / (cutoff * (cutoff - len(direct))) >= choice:
+    # Start when every floor(N*w) is positive. Proportional rounding
+    # bounds the excess above sigma²/N by this decreasing sum.
+    smallest = min(direct)
+    cutoff = (smallest.denominator + smallest.numerator - 1) // smallest.numerator
+    while sigma2 * sum(F(1, cutoff**2 * int(cutoff * w)) for w in direct) >= choice:
         cutoff += 1
     a = dict(optimal_variances(single, cutoff - 1))
     b = dict(optimal_variances(direct, cutoff - 1))
@@ -46,7 +47,8 @@ def main():
     delta = {n: choice + sigma2 * (a[n] - b[n]) for n in b}
     wins = [n for n, d in delta.items() if d < 0]
     ties = [n for n, d in delta.items() if d == 0]
-    assert cutoff == 163 and not ties
+    assert cutoff == 76 and not ties
+    print('Analytische Garantie ab:', cutoff)
     assert wins == [*range(13, 17), *range(18, 26), *range(32, 41)]
     print('Losentscheid besser:', ', '.join(map(str, wins)))
     print('Direktes Mittel dauerhaft besser ab:', max(wins + ties) + 1)
