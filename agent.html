@@ -1317,17 +1317,7 @@
     .message-nav { display:flex; gap:4px; justify-content:center; margin-bottom:4px; }
     .message-nav[hidden] { display:none; }
     .chat-messages > :is(.msg-row, .agent-steps) { flex-shrink: 0; }
-  @supports (appearance: base-select) and selector(::picker(select)) {
-    #chatPicker, #chatPicker::picker(select) { appearance: base-select; }
-    #chatPicker option[data-running]::before {
-      content: '●';
-      margin-inline-end: .4em;
-      color: var(--accent);
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      #chatPicker option[data-running]::before { animation: pulse 1.5s infinite; }
-    }
-  }
+  .chat-picker-status { display:inline-flex; align-items:center; gap:5px; }
   </style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
@@ -1362,7 +1352,7 @@
         <button class="btn btn-outline btn-sm" id="btnNewChat" title="Leeren Chat starten">Neu</button>
         <button type="button" class="btn btn-sm" id="btnForkChat">Kopie</button>
         <button type="button" class="btn btn-sm" id="renameChat">Umbenennen</button>
-        <select id="chatPicker" aria-label="Chat auswählen"></select>
+        <span class="chat-picker-status"><span id="chatStatusDot" class="status-dot busy" title="Chat läuft" aria-hidden="true" hidden></span><select id="chatPicker" aria-label="Chat auswählen"></select></span>
         <button type="button" class="btn btn-sm btn-icon" id="deleteChat" title="Chat löschen" aria-label="Chat löschen">×</button>
         <button class="btn btn-icon" id="btnTheme" title="Hell/Dunkel umschalten" aria-label="Theme umschalten">☀</button>
       </div>
@@ -2085,16 +2075,10 @@
     const saveChat = () => saveLarge(STORAGE_KEYS.CHAT, {chats, active:activeChat.id});
     function chatPicker() {
       const picker = $('#chatPicker');
-      const customizable = CSS.supports('appearance: base-select') && CSS.supports('selector(::picker(select))');
-      picker.replaceChildren(...chats.map(c => {
-        const running = runs.has(c);
-        const option = new Option((running && !customizable ? '● ' : '') + c.title, c.id);
-        option.toggleAttribute('data-running', running);
-        if (running) option.setAttribute('aria-label', `${c.title} – Chat läuft`);
-        return option;
-      }));
+      picker.replaceChildren(...chats.map(c => new Option((runs.has(c) ? '● ' : '') + c.title, c.id)));
       picker.value = activeChat.id;
       const running = runs.has(activeChat);
+      $('#chatStatusDot').hidden = !running;
       picker.setAttribute('aria-label', running ? 'Chat auswählen – aktueller Chat läuft' : 'Chat auswählen');
     }
     function switchChat(chat) {
@@ -4321,13 +4305,28 @@
     try {
       usageTotal = JSON.parse(localStorage.getItem(usageKey)) || usageTotal;
     } catch {}
+    function pricedUsage(usage = emptyUsage(), rates = state.config.tokenRatesUsd) {
+      const result = {...usage};
+      for (const [bucket, counts] of Object.entries(usage.estimated || {})) {
+        let pricing;
+        try { pricing = JSON.parse(bucket); } catch { continue; }
+        if (!Array.isArray(pricing) || !counts) continue;
+        const [key, fallbackInput, fallbackOutput] = pricing;
+        const input = rates?.[key]?.inputRate ?? fallbackInput;
+        const output = rates?.[key]?.outputRate ?? fallbackOutput;
+        if (input != null && output != null) result.dollars += (input * counts.prompt + output * counts.completion) / 1e6;
+        else result.unknown += counts.requests;
+      }
+      return result;
+    }
     function renderUsage() {
-      const u = activeChat?.usage || emptyUsage();
+      const u = pricedUsage(activeChat?.usage || emptyUsage());
+      const global = pricedUsage(usageTotal);
       const cost = u.unknown && !u.dollars ? '$?' : 'ca $' + Math.ceil(u.dollars) + (u.unknown ? '+' : '');
       const badge = $('#sessionUsage');
       badge.textContent = (u.tokens / 1e6).toLocaleString('de-DE', {maximumSignificantDigits:3}) + (u.missing ? '+ Mio. Tokens' : ' Mio. Tokens') + ' · ' + cost;
-      const total = usageTotal.dollars.toLocaleString('de-DE', {style:'currency', currency:'USD', maximumFractionDigits:6});
-      badge.title = 'Gesamtkosten aller Chats: ' + total + (usageTotal.unknown ? ' (zzgl. Anfragen ohne Preisangabe)' : '') + ' · lokal erfasst';
+      const total = global.dollars.toLocaleString('de-DE', {style:'currency', currency:'USD', maximumFractionDigits:6});
+      badge.title = 'Gesamtkosten aller Chats: ' + total + (global.unknown ? ' (zzgl. Anfragen ohne Preisangabe)' : '') + ' · lokal erfasst';
     }
     const catalogKey = 'browsercode_openrouter_prices_v1';
     const catalogMaxAge = 30 * 24 * 60 * 60 * 1000;
@@ -4359,15 +4358,23 @@
       if (Number.isFinite(u?.total_tokens)) delta.tokens += u.total_tokens;
       else if (Number.isFinite(u?.prompt_tokens) && Number.isFinite(u?.completion_tokens)) delta.tokens += u.prompt_tokens + u.completion_tokens;
       else delta.missing++;
-      const input = config.inputRate, output = config.outputRate;
+      let bucket;
       if (config.openRouter && Number.isFinite(u?.cost) && u.cost >= 0) delta.dollars += u.cost;
-      else if (input != null && output != null && Number.isFinite(u?.prompt_tokens) && Number.isFinite(u?.completion_tokens)) {
-        delta.dollars += (input * u.prompt_tokens + output * u.completion_tokens) / 1e6;
+      else if (Number.isFinite(u?.prompt_tokens) && Number.isFinite(u?.completion_tokens)) {
+        bucket = JSON.stringify([config.rateKey, config.automatic.inputRate ?? null, config.automatic.outputRate ?? null]);
       } else delta.unknown++;
       chat.usage ??= emptyUsage();
       for (const key of Object.keys(delta)) {
         chat.usage[key] += delta[key];
         usageTotal[key] += delta[key];
+      }
+      if (bucket) {
+        for (const usage of [chat.usage, usageTotal]) {
+          const counts = ((usage.estimated ??= {})[bucket] ??= {prompt:0, completion:0, requests:0});
+          counts.prompt += u.prompt_tokens;
+          counts.completion += u.completion_tokens;
+          counts.requests++;
+        }
       }
       try { localStorage.setItem(usageKey, JSON.stringify(usageTotal)); } catch {}
       saveChat();
@@ -4395,8 +4402,8 @@
         headers['Authorization'] = `Bearer ${state.config.apiKey.trim()}`;
       }
 
-      const rates = state.config.tokenRatesUsd?.[JSON.stringify([baseUrl, state.config.model || DEFAULT_CONFIG.model])] || {};
       const model = state.config.model || DEFAULT_CONFIG.model;
+      const rateKey = JSON.stringify([baseUrl, model]);
       const body = serializeChatPayload(messages, tools);
       chat.lastPayload = payloadSize(body);
       if (chat === activeChat) $('#lastPayload').textContent = chat.lastPayload;
@@ -4413,9 +4420,9 @@
       try { data = JSON.parse(text); } catch { data = null; }
       if (res.ok) {
         const openRouter = new URL(url, location.href).origin === 'https://openrouter.ai';
-        const automatic = openRouter && !Number.isFinite(data?.usage?.cost) && (rates.inputRate == null || rates.outputRate == null)
+        const automatic = openRouter && !(Number.isFinite(data?.usage?.cost) && data.usage.cost >= 0)
           ? await openRouterRates(data?.model || model) : {};
-        recordUsage(data, { openRouter, inputRate: rates.inputRate ?? automatic.inputRate, outputRate: rates.outputRate ?? automatic.outputRate }, chat);
+        recordUsage(data, { openRouter, rateKey, automatic }, chat);
       }
       if (!res.ok) {
         const errMsg = data?.error?.message || data?.message || text || `HTTP ${res.status}`;
