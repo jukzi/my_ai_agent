@@ -650,6 +650,13 @@
       border: 1px solid var(--border-strong);
       max-width: 88%;
     }
+    .response-time-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      align-self: flex-start; margin: 2px 0 -2px 8px;
+      padding: 2px 8px; border-radius: 999px;
+      border: 1px solid var(--border-strong); background: var(--bg-panel);
+      color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums;
+    }
     .msg-row.assistant .msg-bubble {
       background: var(--bg-panel);
       border: 1px solid var(--border-subtle);
@@ -5058,8 +5065,8 @@
           return `
             <div class="msg-row assistant" data-search-message="${escapeHtml(m.id)}">
               <div class="msg-meta"><span>Agent</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
+              ${Number.isFinite(m.modelTimeMs) ? `<span class="response-time-badge" title="KI-Antwortzeit ohne Tool-Laufzeiten" aria-label="KI-Antwortzeit: ${(m.modelTimeMs / 1000).toLocaleString('de-DE', {maximumFractionDigits: 2})} Sekunden"><span aria-hidden="true">◷</span> ${(m.modelTimeMs / 1000).toLocaleString('de-DE', {maximumFractionDigits: 2})} s</span>` : ''}
               ${m.content?.trim() ? `<div class="msg-bubble"><div class="md-body">${renderMarkdown(m.content)}</div></div>` : ''}
-              ${Number.isFinite(m.modelTimeMs) || (m.content?.trim() && !m.contextSummary) ? `<div class="msg-meta" title="Kumulierte Modell-API-Wartezeit ohne Tool-Laufzeiten">KI-Antwortzeit: <strong>${Number.isFinite(m.modelTimeMs) ? (m.modelTimeMs / 1000).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' s' : 'nicht erfasst'}</strong></div>` : ''}
               ${m === state.chat.at(-1) && canRetryChat(m) ? `<button type="button" class="btn btn-outline btn-sm" data-retry-chat>Erneut versuchen</button>` : ""}
               ${toolsHtml}
             </div>
