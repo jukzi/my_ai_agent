@@ -18,7 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read
       pages: write
       id-token: write
     environment:
@@ -38,21 +37,34 @@ jobs:
           test -s _site/agent.html
           printf '%s\n' '<!doctype html><meta charset="utf-8"><title>MyAiAgent</title><meta http-equiv="refresh" content="0; url=agent.html"><a href="agent.html">MyAiAgent öffnen</a>' > _site/index.html
       - uses: actions/upload-pages-artifact@v3
+        id: upload
         with:
           path: _site
-      - name: Wait for Pages artifact metadata
+      - name: Deploy the uploaded artifact by ID
+        id: deployment
         env:
           GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
         run: |
-          for attempt in {1..10}; do
-            if count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=github-pages" --jq '[.artifacts[] | select(.name == "github-pages" and .expired == false)] | length') && [[ "$count" == 1 ]]; then
-              exit 0
-            fi
-            if [[ "$attempt" != 10 ]]; then sleep 2; fi
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          oidc=$(curl -fsS --max-time 15 \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=pages" | jq -er '.value | strings | select(length > 0)')
+          echo "::add-mask::$oidc"
+          endpoint="repos/$GITHUB_REPOSITORY/pages/deployments"
+          deployment=$(jq -n --arg id "$ARTIFACT_ID" --arg sha "$GITHUB_SHA" --arg token "$oidc" \
+            '{artifact_id: ($id|tonumber), pages_build_version: $sha, oidc_token: $token}' | gh api --method POST "$endpoint" --input -)
+          id=$(jq -er '(.id // (.status_url // "" | split("/") | last)) | tostring | select(test("^[a-zA-Z0-9_-]+$"))' <<< "$deployment")
+          page_url=$(jq -er '.page_url | strings | select(test("^https://[^[:space:][:cntrl:]]+$"))' <<< "$deployment")
+          deadline=$((SECONDS + 600))
+          while (( SECONDS < deadline )); do
+            status=$(gh api "$endpoint/$id" --jq '.status')
+            case "$status" in
+              succeed) printf 'page_url=%s\n' "$page_url" >> "$GITHUB_OUTPUT"; exit 0 ;;
+              deployment_failed|deployment_perms_error|deployment_content_failed|deployment_cancelled|deployment_lost) echo "Pages deployment did not succeed: $status" >&2; exit 1 ;;
+              *) sleep 2 ;;
+            esac
           done
-          echo '::error::Expected exactly one unexpired github-pages artifact in this run.'
+          echo 'Pages deployment timed out.' >&2
           exit 1
-      - uses: actions/deploy-pages@v4
-        id: deployment
-        with:
-          reporting_interval: 1000
