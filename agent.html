@@ -1317,7 +1317,17 @@
     .message-nav { display:flex; gap:4px; justify-content:center; margin-bottom:4px; }
     .message-nav[hidden] { display:none; }
     .chat-messages > :is(.msg-row, .agent-steps) { flex-shrink: 0; }
-  .chat-picker-status { display:inline-flex; align-items:center; gap:5px; }
+  @supports (appearance: base-select) and selector(::picker(select)) {
+    #chatPicker, #chatPicker::picker(select) { appearance: base-select; }
+    #chatPicker option[data-running]::before {
+      content: '●';
+      margin-inline-end: .4em;
+      color: var(--warn);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      #chatPicker option[data-running]::before { animation: pulse 1.5s infinite; }
+    }
+  }
   </style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
@@ -1352,7 +1362,7 @@
         <button class="btn btn-outline btn-sm" id="btnNewChat" title="Leeren Chat starten">Neu</button>
         <button type="button" class="btn btn-sm" id="btnForkChat">Kopie</button>
         <button type="button" class="btn btn-sm" id="renameChat">Umbenennen</button>
-        <span class="chat-picker-status"><span id="chatStatusDot" class="status-dot busy" title="Chat läuft" aria-hidden="true" hidden></span><select id="chatPicker" aria-label="Chat auswählen"></select></span>
+        <select id="chatPicker" aria-label="Chat auswählen"></select>
         <button type="button" class="btn btn-sm btn-icon" id="deleteChat" title="Chat löschen" aria-label="Chat löschen">×</button>
         <button class="btn btn-icon" id="btnTheme" title="Hell/Dunkel umschalten" aria-label="Theme umschalten">☀</button>
       </div>
@@ -2077,10 +2087,16 @@
     const saveChat = () => saveLarge(STORAGE_KEYS.CHAT, {chats, active:activeChat.id});
     function chatPicker() {
       const picker = $('#chatPicker');
-      picker.replaceChildren(...chats.map(c => new Option((runs.has(c) ? '● ' : '') + c.title, c.id)));
+      const customizable = CSS.supports('appearance: base-select') && CSS.supports('selector(::picker(select))');
+      picker.replaceChildren(...chats.map(c => {
+        const running = runs.has(c);
+        const option = new Option((running && !customizable ? '● ' : '') + c.title, c.id);
+        option.toggleAttribute('data-running', running);
+        if (running) option.setAttribute('aria-label', `${c.title} – Chat läuft`);
+        return option;
+      }));
       picker.value = activeChat.id;
       const running = runs.has(activeChat);
-      $('#chatStatusDot').hidden = !running;
       picker.setAttribute('aria-label', running ? 'Chat auswählen – aktueller Chat läuft' : 'Chat auswählen');
     }
     function switchChat(chat) {
