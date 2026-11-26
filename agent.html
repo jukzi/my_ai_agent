@@ -650,8 +650,9 @@
       border: 1px solid var(--border-strong);
       max-width: 88%;
     }
-    .response-timing { display: flex; justify-content: flex-end; margin-top: 6px; }
-    .response-timing .response-time-badge { margin: 0; }
+    .msg-row.assistant .msg-bubble.has-response-timing { position: relative; padding-inline-end: 6rem; }
+    .response-timing { position: absolute; right: 8px; bottom: 4px; }
+    .response-timing .response-time-badge { margin: 0; white-space: nowrap; }
     .response-time-badge {
       display: inline-flex; align-items: center; gap: 4px;
       align-self: flex-start; margin: 2px 0 -2px 8px;
@@ -5076,7 +5077,7 @@
           return `
             <div class="msg-row assistant" data-search-message="${escapeHtml(m.id)}">
               <div class="msg-meta"><span>Agent</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
-              ${m.content?.trim() ? `<div class="msg-bubble"><div class="md-body">${renderMarkdown(m.content)}</div>${Number.isFinite(m.modelTimeMs) ? `<div class="response-timing"><span class="response-time-badge" title="KI-Antwortzeit ohne Tool-Laufzeiten">◷ ${(m.modelTimeMs / 1000).toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1})} s</span></div>` : ''}</div>` : ''}
+              ${m.content?.trim() ? `<div class="msg-bubble${Number.isFinite(m.modelTimeMs) ? ' has-response-timing' : ''}"><div class="md-body">${renderMarkdown(m.content)}</div>${Number.isFinite(m.modelTimeMs) ? `<div class="response-timing"><span class="response-time-badge" title="KI-Antwortzeit ohne Tool-Laufzeiten">◷ ${(m.modelTimeMs / 1000).toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1})} s</span></div>` : ''}</div>` : ''}
               ${m === state.chat.at(-1) && canRetryChat(m) ? `<button type="button" class="btn btn-outline btn-sm" data-retry-chat>Erneut versuchen</button>` : ""}
               ${toolsHtml}
             </div>
