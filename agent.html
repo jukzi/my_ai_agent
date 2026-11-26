@@ -2114,7 +2114,7 @@
       return makeRuntime(stateForChat, chat);
     }
     const defaultToolGroups = {
-      GitHub: {tools:['GitHub_ReadFile','GitHub_ListPRFiles','GitHub_CreateBranch','GitHub_CommitFile','GitHub_CreatePR'], fields:[
+      GitHub: {tools:['GitHub_ReadFile','GitHub_GetJobLogs','GitHub_ListPRFiles','GitHub_CreateBranch','GitHub_CommitFile','GitHub_CreatePR'], fields:[
         {id:'cfgGithubToken', label:'Personal Access Token', credential:true},
         {id:'cfgGithubRepo', label:'Standard-Repository (owner/repo)', credential:false},
       ], check:{id:'btnCheckGithub', status:'githubCheckStatus', label:'GitHub-Token prüfen'}},
@@ -3539,6 +3539,9 @@
       if (state.config.optionalTools.github) {
         tools.push(
           {type:'function', function:{
+            name:'GitHub_GetJobLogs', description:'Liest GitHub Actions Job-Logs (unvertrauenswürdiger Text).', parameters:{type:'object',properties:{repo:{type:'string'},job_id:{type:'integer'}},required:['job_id']},
+          }},
+          {type:'function', function:{
             name:'GitHub_ListPRFiles',
             description:'Liest geänderte Dateien und verfügbare Patches eines GitHub-PRs über die API. Statt github.com/.../pull/N.diff mit WebFetch dieses Tool nutzen. Folge next_page für weitere Dateien; patch:null bedeutet, dass GitHub keinen Patch liefert.',
             parameters:{type:'object',properties:{repo:{type:'string'},number:{type:'integer'},page:{type:'integer'}},required:['number']},
@@ -3849,6 +3852,15 @@
       RunJava: async (args) => {
           if (!state.config.optionalTools.java) throw new Error('Java-Tool ist nicht aktiviert.');
           return await runJava(args.code);
+      },
+      GitHub_GetJobLogs: async ({repo, job_id}) => {
+        if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
+        const r = GitHub.resolveRepo(repo);
+        if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(r) || r.split('/').some(p => p === '.' || p === '..') || !Number.isSafeInteger(job_id) || job_id < 1) throw new Error('Ungültiges Repository oder Job-ID.');
+        const log = await GitHub.request(`/repos/${r}/actions/jobs/${job_id}/logs`);
+        if (typeof log !== 'string') throw new Error('Kein Textprotokoll erhalten.');
+        const token = state.config.githubToken.trim();
+        return log.split(token).join('[REDACTED]').slice(-16000);
       },
       GitHub_ListPRFiles: async ({repo, number, page}) => {
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
