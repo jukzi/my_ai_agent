@@ -8,7 +8,7 @@ permissions: {}
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 6
     env:
       BASE: https://cdn.jsdelivr.net/pyodide/v0.26.4/full
     steps:
@@ -20,7 +20,33 @@ jobs:
           wheel=$(jq -er '.packages.scipy.file_name | select(test("^[a-zA-Z0-9_.-]+[.]whl$"))' lock.json)
           sha=$(jq -er '.packages.scipy.sha256 | select(test("^[a-f0-9]{64}$"))' lock.json)
           printf 'WHEEL=%s\nSHA=%s\n' "$wheel" "$sha" >> "$GITHUB_ENV"
-      - name: Download wheel
+      - name: Download wheel from CDN
+        id: cdn
+        continue-on-error: true
         run: curl -fsSL --max-time 60 --max-filesize 33554432 -o "$WHEEL" "$BASE/$WHEEL"
+      - name: Extract wheel from official release archive
+        if: steps.cdn.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 120 --max-filesize 350000000 -o release.tar.bz2 https://github.com/pyodide/pyodide/releases/download/0.26.4/pyodide-0.26.4.tar.bz2
+          python - <<'PY'
+          import os, pathlib, shutil, tarfile
+          name = os.environ['WHEEL']
+          with tarfile.open('release.tar.bz2', 'r|bz2') as archive:
+              for member in archive:
+                  if member.isfile() and pathlib.PurePosixPath(member.name).name == name:
+                      if member.size > 32 * 1024 * 1024:
+                          raise ValueError('Wheel exceeds size limit')
+                      with archive.extractfile(member) as source, open(name, 'wb') as output:
+                          shutil.copyfileobj(source, output)
+                      break
+              else:
+                  raise FileNotFoundError(name)
+          PY
       - name: Verify SHA-256
         run: printf '%s  %s\n' "$SHA" "$WHEEL" | sha256sum --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-scipy-wheel
+          path: ${{ env.WHEEL }}
+          retention-days: 3
