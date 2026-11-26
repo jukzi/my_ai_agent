@@ -5981,7 +5981,13 @@
         if (copy) {
           const msg = state.chat.find(m => m.id === copy.dataset.copyMessage);
           if (!msg) return;
-          const text = String(msg.content ?? '');
+          const content = String(msg.content ?? '');
+          const toolSteps = (msg.tool_calls || []).map(tc => {
+            const args = tc.rawArgs ?? JSON.stringify(tc.args ?? {}, null, 2);
+            const result = tc.result ?? tc.error ?? (tc.status === 'running' ? '(läuft noch)' : '(keine Antwort)');
+            return `Tool: ${tc.name}\nArgumente:\n${args}\nAntwort:\n${result}`;
+          });
+          const text = [content, ...toolSteps].filter(Boolean).join('\n\n');
           // Copy rendered formatting without copying active elements or attributes.
           const rendered = copy.closest('.msg-row')?.querySelector('.msg-bubble > .md-body');
           const formatted = document.createElement('div');
@@ -6000,7 +6006,12 @@
             }
           }
           if (rendered) appendSafe(rendered, formatted);
-          else formatted.textContent = text;
+          else formatted.textContent = content;
+          for (const step of toolSteps) {
+            const pre = document.createElement('pre');
+            pre.textContent = step;
+            formatted.append(pre);
+          }
           try {
             if (typeof ClipboardItem === 'function' && navigator.clipboard?.write) {
               await navigator.clipboard.write([new ClipboardItem({
