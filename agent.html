@@ -1936,6 +1936,79 @@
         }
       }
     }
+    function runProlog(program, query) {
+      if (typeof program !== 'string' || program.length > 100000 || typeof query !== 'string' || !query.trim() || query.length > 10000) throw new Error('Ungültiges oder zu großes Prolog-Programm bzw. Ziel.');
+      const workerSource = async ({data}) => {
+        try {
+          importScripts('https://cdn.jsdelivr.net/npm/tau-prolog@0.3.4/modules/core.js');
+          const session = pl.create(100000);
+          await new Promise((success, error) => session.consult(data.program, {success, error, file:false, url:false, html:false}));
+          await new Promise((success, error) => session.query(data.query, {success, error}));
+          const answers = [];
+          let status = 'complete';
+          while (answers.length < 21) {
+            const answer = await new Promise((success, error) => session.answer({success, error, fail: () => success(null), limit: () => success(undefined)}));
+            if (answer === null) break;
+            if (answer === undefined) { status = 'inference_limit'; break; }
+            answers.push(session.format_answer(answer).slice(0,2000));
+          }
+          if (answers.length > 20) { answers.pop(); status = 'answer_limit'; }
+          postMessage({output:JSON.stringify({answers,status})});
+        } catch (error) { postMessage({error:String(error).slice(0,500)}); }
+      };
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(new Blob([`self.onmessage = ${workerSource.toString()};`], {type:'text/javascript'}));
+        let worker;
+        try { worker = new Worker(url); } finally { URL.revokeObjectURL(url); }
+        const finish = () => { clearTimeout(timer); worker.terminate(); };
+        const timer = setTimeout(() => { finish(); reject(new Error('Prolog: Zeitlimit erreicht.')); }, 15000);
+        worker.onmessage = ({data}) => { finish(); if (data.error) reject(new Error(data.error)); else resolve(data.output); };
+        worker.onerror = () => { finish(); reject(new Error('Prolog-Worker konnte nicht ausgeführt werden.')); };
+        worker.postMessage({program, query});
+      });
+    }
+
+    function runSQL(sql) {
+      if (typeof sql !== 'string' || !sql.trim() || sql.length > 100000) throw new Error('SQL erwartet 1 bis 100.000 Zeichen.');
+      const workerSource = async ({data}) => {
+        let db;
+        try {
+          const base = 'https://cdn.jsdelivr.net/npm/sql.js@1.13.0/dist/';
+          importScripts(base + 'sql-wasm.js');
+          const { Database } = await initSqlJs({ locateFile: file => base + file });
+          db = new Database();
+          const results = [];
+          let remaining = 100;
+          let truncated = false;
+          for (const stmt of db.iterateStatements(data)) {
+            const columns = stmt.getColumnNames();
+            const values = [];
+            while (stmt.step()) {
+              if (!remaining) { truncated = true; break; }
+              remaining--;
+              values.push(stmt.get().map(value => value instanceof Uint8Array ? `[BLOB: ${value.length} Bytes]` : typeof value === 'string' && value.length > 1000 ? (truncated = true, value.slice(0,1000) + '…') : value));
+            }
+            if (columns.length) results.push({ columns, values });
+            if (results.length >= 100) { truncated = true; break; }
+          }
+          const output = JSON.stringify({results, truncated});
+          if (output.length > 100000) throw new Error('SQL-Ausgabe zu groß; weniger Spalten oder Zeilen abfragen.');
+          postMessage({output});
+        } catch (error) { postMessage({error: String(error).slice(0,500)}); }
+        finally { db?.close(); }
+      };
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(new Blob([`self.onmessage = ${workerSource.toString()};`], {type:'text/javascript'}));
+        let worker;
+        try { worker = new Worker(url); } finally { URL.revokeObjectURL(url); }
+        const finish = () => { clearTimeout(timer); worker.terminate(); };
+        const timer = setTimeout(() => { finish(); reject(new Error('SQL.js: Zeitlimit erreicht.')); }, 15000);
+        worker.onmessage = ({data}) => { finish(); if (data.error) reject(new Error(data.error)); else resolve(data.output); };
+        worker.onerror = () => { finish(); reject(new Error('SQL.js-Worker konnte nicht ausgeführt werden.')); };
+        worker.postMessage(sql);
+      });
+    }
+
     function runCustom(tool, args, text) {
       return new Promise((resolve, reject) => {
         const frame = document.createElement('iframe');
@@ -2035,7 +2108,7 @@
         {id:'cfgGithubRepo', label:'Standard-Repository (owner/repo)', credential:false},
       ], check:{id:'btnCheckGithub', status:'githubCheckStatus', label:'GitHub-Token prüfen'}},
       Web: {tools:['WebFetch','JinaReader']},
-      Laufzeiten: {tools:['RunPython','RunJava','RunJavaScript','Bash']},
+      Laufzeiten: {tools:['RunPython','RunJava','RunJavaScript','RunSQL','RunProlog','Bash']},
       'Ausgabe und Organisation': {tools:['ShowImage','ShowHTML','ShowTable','MemoryRead','MemoryWrite','MemoryDelete','TodoWrite']},
     };
     const defaultGroupByTool = new Map(Object.entries(defaultToolGroups).flatMap(([group, definition]) => definition.tools.map(name => [name, group])));
@@ -3313,6 +3386,18 @@
         tools.push({
           type: 'function',
           function: {
+            name: 'RunSQL',
+            description: 'Führt SQLite-SQL lokal mit SQL.js aus. Jeder Aufruf startet mit einer leeren temporären Datenbank. CREATE, INSERT und SELECT zusammen übergeben. Keine externen Datenbanken oder Workspace-Dateien.',
+            parameters: { type: 'object', properties: { sql: { type: 'string' } }, required: ['sql'] },
+          },
+        });
+        tools.push({type:'function', function:{
+          name:'RunProlog', description:'Löst logische Aufgaben per Tau Prolog. Übergib Fakten und Regeln als program und ein Ziel mit abschließendem Punkt als query. Liefert bis zu 20 Variablenbelegungen. Jeder Aufruf startet neu.',
+          parameters:{type:'object',properties:{program:{type:'string'},query:{type:'string'}},required:['program','query']},
+        }});
+        tools.push({
+          type: 'function',
+          function: {
             name: 'RunJavaScript',
             description: 'Führt JavaScript-Code in einer Browser-Sandbox aus. Verfügbar: console.log und workspace.{list,read,write,delete}.',
             parameters: {
@@ -3623,6 +3708,14 @@
       RunPython: async (args) => {
           if (!state.config.optionalTools.python) throw new Error('Python-Tool ist nicht aktiviert.');
           return await runPython(args.code, args.packages);
+      },
+      RunProlog: async ({program, query}) => {
+        if (!state.config.optionalTools.javascript) throw new Error('JavaScript-Laufzeit ist nicht aktiviert.');
+        return await runProlog(program, query);
+      },
+      RunSQL: async (args) => {
+          if (!state.config.optionalTools.javascript) throw new Error('JavaScript-Laufzeit ist nicht aktiviert.');
+          return await runSQL(args.sql);
       },
       RunJavaScript: async (args) => {
           if (!state.config.optionalTools.javascript) throw new Error('JavaScript-Tool ist nicht aktiviert.');
