@@ -3633,7 +3633,7 @@
         return description ? {...tool, function:{...tool.function, description}} : tool;
       });
       const custom = getCustomDefinitions().filter(tool => chat.customEnabled?.[tool.function.name] === true);
-      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liefert Gruppe, Felder, Credential-Status und konfigurierte Ziel-URLs ohne Token. setConfig setzt mit field und value einen Wert; mit target und einem absoluten URL-Pfad als value wird ein benanntes Ziel an der bestehenden Credential-Origin eingerichtet; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten HTTP-Aufruf an das vom Nutzer hinterlegte Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String,target?:String (Name eines vom Nutzer hinterlegten Ziels),method?:String (Standard GET),path?:relativer Dateipfad (Basisziel endet auf /, einschließlich Origin-Wurzel),query?:Objekt mit Stringwerten,body?:String,contentType?:String}} zurück. Liefert HTTP-Status und Antworttext bis 64 KiB. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für Vorschauen gib {display:{kind:"html" oder "image",path:String}} für eine Workspace-Datei zurück. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},target:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
+      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liefert Gruppe, Felder, Credential-Status und konfigurierte Ziel-URLs ohne Token. setConfig setzt mit field und value einen Wert; mit target und einem absoluten URL-Pfad als value wird ein benanntes Ziel an der bestehenden Credential-Origin eingerichtet; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten HTTP-Aufruf an das vom Nutzer hinterlegte Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String,target?:String (Name eines vom Nutzer hinterlegten Ziels),method?:String (Standard GET),path?:relativer Dateipfad (Basisziel endet auf /),query?:Objekt mit Stringwerten,body?:String,contentType?:String,saveZip?:Boolean (direkte ZIP-Antwort im Workspace speichern, benötigt Write)}} zurück. Liefert HTTP-Status und Antworttext bis 64 KiB. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für Vorschauen gib {display:{kind:"html" oder "image",path:String}} für eine Workspace-Datei zurück. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},target:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
       return [...builtins, ...custom, management, ...(state.config.optionalTools.javascript ? [manage] : [])];
     }
 
@@ -3996,7 +3996,7 @@
           if (request.path !== undefined) {
             const path = request.path;
             if (typeof path !== 'string' || path.length > 2048 || !url.pathname.endsWith('/') ||
-                path.split('/').some(segment => !segment || segment === '.' || segment === '..' || /[%\\?#\x00-\x1f\x7f]/.test(segment))) {
+                url.pathname === '/' || path.split('/').some(segment => !segment || segment === '.' || segment === '..' || /[%\\?#\x00-\x1f\x7f]/.test(segment))) {
               throw new Error('Erwartet einen relativen Dateipfad und ein konfiguriertes Basisziel mit abschließendem Slash.');
             }
             url.pathname += path.split('/').map(encodeURIComponent).join('/');
@@ -4022,6 +4022,34 @@
           const basicUser = values.get('basic-user:' + field.key);
           const authorization = basicUser ? 'Basic ' + btoa(Array.from(new TextEncoder().encode(basicUser + ':' + token), byte => String.fromCharCode(byte)).join('')) : 'Bearer ' + token;
           const response = await fetch(url, {method, body:bodyInput, credentials:'omit', redirect:'error', referrerPolicy:'no-referrer', signal:AbortSignal.timeout(10000), headers:{Authorization:authorization, ...(contentType === undefined ? {} : {'Content-Type':contentType})}});
+          if (request.saveZip === true && response.ok) {
+            const writeEnabled = () => getActiveToolDefinitions().some(item => item.function.name === 'Write');
+            if (!writeEnabled()) throw new Error('Write muss aktiviert sein.');
+            const reader = response.body?.getReader();
+            if (!reader) throw new Error('Leere ZIP-Antwort.');
+            const chunks = [];
+            let size = 0;
+            try {
+              for (;;) {
+                const {done, value} = await reader.read();
+                if (done) break;
+                size += value.length;
+                if (size > 64 * 1024 * 1024) throw new Error('ZIP-Diagnosegrenze von 64 MiB überschritten.');
+                chunks.push(value);
+              }
+            } catch (error) {
+              await reader.cancel().catch(() => {});
+              throw error;
+            }
+            const bytes = new Uint8Array(await new Blob(chunks).arrayBuffer());
+            if (bytes[0] !== 80 || bytes[1] !== 75 || bytes[2] !== 3 || bytes[3] !== 4) throw new Error('Antwort ist kein ZIP-Archiv.');
+            if (!writeEnabled()) throw new Error('Write ist nicht mehr aktiv.');
+            const path = `uploads/response-${crypto.randomUUID()}.zip`;
+            const parts = [];
+            for (let i = 0; i < bytes.length; i += 8192) parts.push(String.fromCharCode(...bytes.subarray(i, i + 8192)));
+            VFS.write(path, 'data:application/zip;base64,' + btoa(parts.join('')), {isBinary:true, mime:'application/zip'});
+            return JSON.stringify({status:response.status, path, bytes:size});
+          }
           const reader = response.body?.getReader();
           const decoder = new TextDecoder();
           let bytes = 0, body = '';
