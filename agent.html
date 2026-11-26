@@ -3679,7 +3679,7 @@
             if (!/^\/(?!\/)/.test(args.value) || /[%\\?#\s]/.test(args.value) || args.value.split('/').some(part => part === '.' || part === '..')) throw new Error('Erwartet einen absoluten URL-Pfad ohne Query oder Fragment.');
             const target = new URL(args.value, base);
             const route = base.pathname.split('/')[1];
-            if (target.origin !== base.origin || !route || target.pathname.split('/')[1] !== route) throw new Error('Ziel liegt außerhalb der konfigurierten Route.');
+            if (target.origin !== base.origin || (route && target.pathname.split('/')[1] !== route)) throw new Error('Ziel liegt außerhalb der konfigurierten Route.');
             values.set(prefix + ':' + args.target, target.href);
             localStorage.setItem(settingsKey + scope,JSON.stringify([...values]));
             return JSON.stringify({target:args.target,endpoint:target.href});
