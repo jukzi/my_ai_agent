@@ -3220,11 +3220,12 @@
 
     // GitHub REST API Client
     const GitHub = {
-      async request(endpoint, method = 'GET', body = null, binary = false) {
+      async request(endpoint, method = 'GET', body = null, binary = false, cache = 'default') {
         const token = state.config.githubToken?.trim();
         if (!token) throw new Error('Kein GitHub Token in den Einstellungen konfiguriert.');
         const res = await fetch(`https://api.github.com${endpoint}`, {
           method,
+          cache,
           headers: {
             'Authorization': `Bearer ${token}`,
             'Accept': 'application/vnd.github+json',
@@ -3306,18 +3307,32 @@
           b64Content = btoa(unescape(encodeURIComponent(String(content ?? ''))));
         }
 
-        let existingSha = undefined;
+        const endpoint = `/repos/${r}/contents/${normPath}`;
+        const readSha = async () => {
+          try {
+            const existing = await this.request(`${endpoint}?ref=${encodeURIComponent(branch)}`, 'GET', null, false, 'no-store');
+            if (existing.type !== 'file' || !existing.sha) throw new Error(`Keine reguläre Datei: ${normPath}`);
+            return existing.sha;
+          } catch (error) {
+            if (error.status !== 404) throw error;
+            return undefined;
+          }
+        };
+        const existingSha = await readSha();
+        let res;
         try {
-          const existing = await this.request(`/repos/${r}/contents/${normPath}?ref=${encodeURIComponent(branch)}`);
-          existingSha = existing.sha;
-        } catch { /* new file */ }
-
-        const res = await this.request(`/repos/${r}/contents/${normPath}`, 'PUT', {
-          message: message || `Update ${normPath}`,
-          content: b64Content,
-          branch,
-          ...(existingSha ? { sha: existingSha } : {}),
-        });
+          res = await this.request(endpoint, 'PUT', {
+            message: message || `Update ${normPath}`,
+            content: b64Content,
+            branch,
+            ...(existingSha ? { sha: existingSha } : {}),
+          });
+        } catch (error) {
+          if (error.status !== 409) throw error;
+          const currentSha = await readSha().catch(() => { throw error; });
+          if (currentSha === existingSha) throw error;
+          throw Object.assign(new Error(`GitHub API 409: ${normPath} auf ${branch} wurde seit dem Lesen geändert. Bitte aktuellen Stand prüfen und Änderungen zusammenführen.`, {cause:error}), {status:409});
+        }
         return { path: normPath, branch, commit_sha: res.commit?.sha, html_url: res.content?.html_url };
       },
       async createPullRequest(repo, title, body, head, base, draft = false) {
