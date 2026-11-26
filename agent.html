@@ -2700,8 +2700,93 @@
       return report;
     }
 
+    const scipyMirror = {
+      version: '0.26.4',
+      sha: '1a081410432367ee43f52a280961df4ba7e9bb65d8b9862b3cd2e3727e84d873',
+      wheel: 'scipy-1.12.0-cp312-cp312-pyodide_2024_0_wasm32.whl',
+    };
+    async function scipyCache(key, bytes) {
+      const db = await new Promise((resolve, reject) => {
+        const request = indexedDB.open('myaiagent-pyodide-wheels', 1);
+        request.onupgradeneeded = () => request.result.createObjectStore('wheels');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = request.onblocked = () => reject(request.error);
+      });
+      try {
+        return await new Promise((resolve, reject) => {
+          const tx = db.transaction('wheels', bytes ? 'readwrite' : 'readonly');
+          const store = tx.objectStore('wheels');
+          const request = bytes ? store.put(bytes, key) : store.get(key);
+          tx.oncomplete = () => resolve(request.result);
+          tx.onabort = () => reject(tx.error);
+        });
+      } finally { db.close(); }
+    }
+    async function loadScipy(py) {
+      const check = () => py.runPython('import scipy\nfrom scipy import sparse');
+      try { check(); return; } catch {}
+      const { version, sha, wheel } = scipyMirror;
+      const key = `${version}:${sha}`;
+      const verified = async bytes => bytes instanceof ArrayBuffer &&
+        Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
+          b => b.toString(16).padStart(2, '0')).join('') === sha;
+      const install = async bytes => {
+        await py.loadPackage(['numpy', 'openblas', 'micropip']);
+        const path = '/tmp/' + wheel;
+        py.FS.writeFile(path, new Uint8Array(bytes));
+        try {
+          await py.runPythonAsync(`import micropip\nawait micropip.install('emfs:${path}', deps=False)`);
+          check();
+        } finally { py.FS.unlink(path); }
+      };
+      if (py.version === version && globalThis.crypto?.subtle) {
+        const cached = await scipyCache(key).catch(() => null);
+        if (await verified(cached)) {
+          await install(cached);
+          return;
+        }
+      }
+      const errors = [];
+      try {
+        await py.loadPackage('scipy', { errorCallback: message => errors.push(message) });
+        check();
+        return;
+      } catch (error) {
+        if (py.version !== version || !globalThis.crypto?.subtle) throw error;
+        errors.push(error.message);
+      }
+      try {
+        const base = new URL(`mirrors/${version}/${sha}/`, document.baseURI);
+        const get = async name => {
+          const response = await fetch(new URL(name, base), { signal: AbortSignal.timeout(20000) });
+          if (!response.ok) throw new Error(`SciPy-Mirror: ${name}: HTTP ${response.status}`);
+          return response;
+        };
+        const size = await (await get('size.json')).json();
+        const chunk = 2 * 1024 * 1024;
+        if (!Number.isSafeInteger(size) || size <= 0 || size > 32 * chunk) throw new Error('Ungültige Wheel-Größe');
+        const bytes = new Uint8Array(size);
+        for (let offset = 0; offset < size; offset += chunk) {
+          const part = await (await get(`${offset / chunk}.bin`)).arrayBuffer();
+          if (part.byteLength !== Math.min(chunk, size - offset)) throw new Error('Ungültige Teilgröße');
+          bytes.set(new Uint8Array(part), offset);
+        }
+        if (!await verified(bytes.buffer)) throw new Error('SciPy-Wheel: SHA-256 stimmt nicht überein');
+        await install(bytes.buffer);
+        await scipyCache(key, bytes.buffer).catch(error => console.warn('SciPy-Cache:', error));
+      } catch (error) {
+        throw new Error(`SciPy: Standardloader und Mirror fehlgeschlagen (${errors.join('; ').slice(0, 600)}): ${error.message}`, { cause: error });
+      }
+    }
+
+    let scipyLoading;
     async function runPython(code, packages = []) {
       const py = await ensurePyodide();
+      if (Array.isArray(packages) && packages.some(name => String(name).toLowerCase() === 'scipy')) {
+        scipyLoading ??= loadScipy(py).finally(() => { scipyLoading = null; });
+        await scipyLoading;
+        packages = packages.filter(name => String(name).toLowerCase() !== 'scipy');
+      }
       if (Array.isArray(packages) && packages.length) {
         const started = performance.now();
         const messages = [];
