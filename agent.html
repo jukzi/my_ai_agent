@@ -1313,9 +1313,9 @@
     .empty-chat .chat-messages { flex:0; padding:0; }
     .empty-chat .composer-wrap { border-top:0; }
     .empty-chat .composer-box { max-width:720px; border-color:var(--accent); }
-    .composer-input { max-height:calc(4.5em + 6px); }
-    #chatInput { min-height:calc(4.5em + 6px); max-height:calc(4.5em + 6px); overflow-y:auto; }
-    .chat-panel:not(.empty-chat).compact-composer #chatInput { min-height:calc(3em + 6px); max-height:calc(3em + 6px); }
+    #chatInput { box-sizing:border-box; min-height:calc(1.5em + 6px); max-height:calc(7.5em + 6px); overflow-y:auto; }
+    .message-nav { display:flex; gap:4px; justify-content:center; margin-bottom:4px; }
+    .message-nav[hidden] { display:none; }
     .chat-messages > :is(.msg-row, .agent-steps) { flex-shrink: 0; }
   .chat-picker-status { display:inline-flex; align-items:center; gap:5px; }
   </style>
@@ -1424,6 +1424,12 @@
         <div class="chat-messages" id="chatMessages"></div>
 
         <div class="composer-wrap">
+          <div class="message-nav" id="messageNav" role="group" aria-label="Nachrichten-Navigation" hidden>
+            <button type="button" class="btn" data-jump="first" title="Erste Nachricht" aria-label="Erste Nachricht">⇈</button>
+            <button type="button" class="btn" data-jump="previous" title="Vorherige Nachricht" aria-label="Vorherige Nachricht">↑</button>
+            <button type="button" class="btn" data-jump="next" title="Nächste Nachricht" aria-label="Nächste Nachricht">↓</button>
+            <button type="button" class="btn" data-jump="last" title="Letzte Nachricht" aria-label="Letzte Nachricht">⇊</button>
+          </div>
           <div class="composer-box" id="composerBox">
             <div class="composer-attachments" id="composerAttachments"></div>
             <div class="composer-row">
@@ -1432,7 +1438,7 @@
               <textarea
                 id="chatInput"
                 class="composer-input"
-                rows="3"
+                rows="1"
                 placeholder="Nachricht eingeben… (Enter zum Senden, Shift+Enter für Zeilenumbruch, Bilder einfügen per Strg+V)"
               ></textarea>
               <button class="btn btn-primary" id="btnSend">Senden</button>
@@ -4779,7 +4785,7 @@
       });
 
       input.value = '';
-      input.style.height = 'auto';
+      input.dispatchEvent(new Event('input'));
       state.pendingAttachments = [];
       renderPendingAttachments();
       saveChat();
@@ -5693,28 +5699,38 @@
       chatPicker();
       bindEvents();
       const messages = $('#chatMessages');
-      const panel = $('#chatPanel');
+      const nav = $('#messageNav');
       const input = $('#chatInput');
-      let frame;
-      const fitComposer = () => {
-        cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(() => {
-          const compact = panel.classList.contains('compact-composer');
-          const reserve = compact ? parseFloat(getComputedStyle(input).lineHeight) : 0;
-          const last = messages.lastElementChild;
-          const slack = last ? messages.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom - messages.scrollTop - parseFloat(getComputedStyle(messages).paddingBottom) : Infinity;
-          const next = !panel.classList.contains('empty-chat') && slack < reserve - 0.5;
-          if (next !== compact) {
-            const pinned = messages.scrollHeight - messages.clientHeight - messages.scrollTop <= 24;
-            panel.classList.toggle('compact-composer', next);
-            if (pinned) messages.scrollTop = messages.scrollHeight;
-          }
-        });
+      const resizeInput = () => {
+        const pinned = messages.scrollHeight - messages.clientHeight - messages.scrollTop <= 24;
+        input.style.height = 'auto';
+        input.style.height = input.scrollHeight + 'px';
+        if (pinned) messages.scrollTop = messages.scrollHeight;
       };
-      const resize = new ResizeObserver(fitComposer);
-      const observeRows = () => { resize.disconnect(); resize.observe(messages); for (const row of messages.children) resize.observe(row); fitComposer(); };
-      new MutationObserver(observeRows).observe(messages, {childList:true});
-      observeRows();
+      input.addEventListener('input', resizeInput);
+      let width;
+      new ResizeObserver(([entry]) => {
+        if (entry.contentRect.width === width) return;
+        width = entry.contentRect.width;
+        resizeInput();
+      }).observe(input);
+      const rows = () => [...messages.querySelectorAll(':scope > .msg-row[data-search-message]')];
+      const updateNav = () => { nav.hidden = rows().length === 0; };
+      new MutationObserver(updateNav).observe(messages, {childList:true});
+      updateNav();
+      nav.addEventListener('click', event => {
+        const direction = event.target.closest('[data-jump]')?.dataset.jump;
+        const items = rows();
+        if (!direction || !items.length) return;
+        const top = messages.getBoundingClientRect().top + messages.clientTop;
+        const offset = row => row.getBoundingClientRect().top - top;
+        if (direction === 'first') { messages.scrollTop = 0; return; }
+        if (direction === 'last') { messages.scrollTop = messages.scrollHeight; return; }
+        const target = direction === 'next'
+          ? items.find(row => offset(row) > 2)
+          : items.slice().reverse().find(row => offset(row) < -2);
+        if (target) messages.scrollTop += offset(target);
+      });
       bindKeySetup();
     }
 
