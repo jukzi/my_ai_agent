@@ -1908,6 +1908,31 @@
           });
           target.append('Festes HTTP(S)-Ziel (HTTP ist unverschlüsselt) für ' + field.key, url, urlError);
           container.append(target);
+          const named = document.createElement('label');
+          named.className = 'field';
+          const editor = document.createElement('textarea');
+          const error = document.createElement('span');
+          bindFieldError(editor, error);
+          const prefix = key + ':';
+          editor.value = [...readToolSettings(scope)].filter(([k]) => k.startsWith(prefix)).map(([k,v]) => k.slice(prefix.length) + '=' + v).join('\n');
+          editor.addEventListener('change', () => {
+            try {
+              const targets = new Map();
+              for (const line of editor.value.split('\n').map(line => line.trim()).filter(Boolean)) {
+                const match = /^([A-Za-z][A-Za-z0-9_-]{0,39})=(.+)$/.exec(line);
+                if (!match || targets.has(match[1])) throw new Error('Erwartet eindeutige Einträge: name=URL.');
+                const u = new URL(match[2]);
+                if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.hash || u.search) throw new Error(urlHelp);
+                targets.set(match[1], u.href);
+              }
+              const values = readToolSettings(scope);
+              for (const k of values.keys()) if (k.startsWith(prefix)) values.delete(k);
+              for (const [name, href] of targets) values.set(prefix + name, href);
+              localStorage.setItem(settingsKey + scope, JSON.stringify([...values]));
+            } catch (err) { showFieldError(editor, error, err.message); }
+          });
+          named.append('Benannte HTTP(S)-Ziele für ' + field.key + ' (ein name=URL pro Zeile)', editor, error);
+          container.append(named);
         }
       }
     }
@@ -3407,7 +3432,7 @@
         return description ? {...tool, function:{...tool.function, description}} : tool;
       });
       const custom = getCustomDefinitions().filter(tool => chat.customEnabled?.[tool.function.name] === true);
-      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liest normale Werte und den Status von Credentials. setConfig setzt einen Wert mit field und value; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten HTTP-Aufruf an das vom Nutzer hinterlegte Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String,method?:String (Standard GET),path?:relativer Dateipfad (Basisziel endet auf /),query?:Objekt mit Stringwerten,body?:String,contentType?:String}} zurück. Liefert HTTP-Status und Antworttext bis 64 KiB. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für Vorschauen gib {display:{kind:"html" oder "image",path:String}} für eine Workspace-Datei zurück. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
+      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liest normale Werte und den Status von Credentials. setConfig setzt einen Wert mit field und value; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten HTTP-Aufruf an das vom Nutzer hinterlegte Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String,target?:String (Name eines vom Nutzer hinterlegten Ziels),method?:String (Standard GET),path?:relativer Dateipfad (Basisziel endet auf /),query?:Objekt mit Stringwerten,body?:String,contentType?:String}} zurück. Liefert HTTP-Status und Antworttext bis 64 KiB. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für Vorschauen gib {display:{kind:"html" oder "image",path:String}} für eine Workspace-Datei zurück. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
       return [...builtins, ...custom, management, ...(state.config.optionalTools.javascript ? [manage] : [])];
     }
 
@@ -3648,7 +3673,7 @@
           const groups = readGroupFields();
           const scope = 'group:' + group;
           const values = readToolSettings(scope);
-          for (const field of groups.get(group) || []) if (!fields.some(item => item.key === field.key && item.credential === field.credential)) { values.delete(field.key); values.delete('endpoint:' + field.key); }
+          for (const field of groups.get(group) || []) if (!fields.some(item => item.key === field.key && item.credential === field.credential)) { values.delete(field.key); for (const k of values.keys()) if (k === 'endpoint:' + field.key || k.startsWith('endpoint:' + field.key + ':')) values.delete(k); }
           localStorage.setItem(settingsKey + scope, JSON.stringify([...values]));
           groups.set(group, fields);
           localStorage.setItem(groupFieldsKey, JSON.stringify([...groups]));
@@ -3663,7 +3688,7 @@
           if (action === 'getConfig') return JSON.stringify(Object.fromEntries(fields.map(field => [field.key,field.credential ? {configured:values.has(field.key)} : values.get(field.key) ?? ''])));
           const field = fields.find(field => field.key === args.field);
           if (!field || typeof args.value !== 'string' || args.value.length > 10000) throw new Error('Ungültiger Konfigurationswert.');
-          if (args.value) values.set(field.key,args.value); else { values.delete(field.key); values.delete('endpoint:' + field.key); }
+          if (args.value) values.set(field.key,args.value); else { values.delete(field.key); for (const k of values.keys()) if (k === 'endpoint:' + field.key || k.startsWith('endpoint:' + field.key + ':')) values.delete(k); }
           localStorage.setItem(settingsKey + scope,JSON.stringify([...values]));
           return 'Konfiguration gespeichert.';
         }
@@ -3677,7 +3702,7 @@
         else if (action === 'save' && typeof description === 'string' && typeof javascript === 'string' && javascript.length <= 20000) {
           const previous = next.get(key)?.fields || [];
           const values = readToolSettings(key);
-          for (const field of previous) if (!fields.some(item => item.key === field.key && item.credential === field.credential)) { values.delete(field.key); values.delete('endpoint:' + field.key); }
+          for (const field of previous) if (!fields.some(item => item.key === field.key && item.credential === field.credential)) { values.delete(field.key); for (const k of values.keys()) if (k === 'endpoint:' + field.key || k.startsWith('endpoint:' + field.key + ':')) values.delete(k); }
           localStorage.setItem(settingsKey + key, JSON.stringify([...values]));
           next.set(key,{name:key,fields,group:builtin ? undefined : args.group ? "Eigene Tools / " + args.group.trim() : next.get(key)?.group,description:description.slice(0,2000),javascript,parameters:{type:'object',properties:{file_path:{type:'string'},input:{type:'string'}}}});
         } else throw new Error('Ungültige Tool-Definition');
@@ -3705,7 +3730,9 @@
           const field = fields?.find(item => item.credential && item.key === request?.credential);
           const values = readToolSettings(scope);
           const token = field && values.get(field.key);
-          const endpoint = field && values.get('endpoint:' + field.key);
+          const targetName = request.target;
+          if (targetName !== undefined && (typeof targetName !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(targetName))) throw new Error('Ungültiger Zielname.');
+          const endpoint = field && values.get('endpoint:' + field.key + (targetName === undefined ? '' : ':' + targetName));
           if (!token || !endpoint) throw new Error('Credential und festes HTTP(S)-Ziel müssen konfiguriert sein.');
           const url = new URL(endpoint);
           if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash || url.search) throw new Error('Ungültiges Credential-Ziel.');
