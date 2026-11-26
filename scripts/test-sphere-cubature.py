@@ -32,6 +32,18 @@ class SphereCheckerTest(unittest.TestCase):
                 self.assertEqual(result.returncode, status, result.stderr)
                 self.assertIn('Maximum moment residual:', result.stdout)
 
+    def test_published_weighted_rule(self):
+        # https://people.sc.fsu.edu/~jburkardt/datasets/sphere_lebedev_rule/lebedev_005.txt
+        axes = TABLE.replace('0.166666666666667', '0.066666666666667')
+        corners = ''.join(f'{az} {polar} 0.075\n'
+                          for az in (45, -45, 135, -135)
+                          for polar in ('54.735610317245346', '125.264389682754654'))
+        for degree, status in [(5, 0), (6, 1)]:
+            with self.subTest(degree=degree):
+                result = self.check_table(axes + corners, degree)
+                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertIn('14 rows;', result.stdout)
+
     def test_wrong_normalization(self):
         self.assertEqual(self.check_table(TABLE.replace('0.166666666666667', '0.1'), 0).returncode, 1)
 
