@@ -2126,7 +2126,7 @@
       return makeRuntime(stateForChat, chat);
     }
     const defaultToolGroups = {
-      GitHub: {tools:['GitHub_ReadFile','GitHub_GetJobLogs','GitHub_ListPRFiles','GitHub_CreateBranch','GitHub_CommitFile','GitHub_CreatePR'], fields:[
+      GitHub: {tools:['GitHub_DownloadArtifact','GitHub_ReadFile','GitHub_GetJobLogs','GitHub_ListPRFiles','GitHub_CreateBranch','GitHub_CommitFile','GitHub_CreatePR'], fields:[
         {id:'cfgGithubToken', label:'Personal Access Token', credential:true},
         {id:'cfgGithubRepo', label:'Standard-Repository (owner/repo)', credential:false},
       ], check:{id:'btnCheckGithub', status:'githubCheckStatus', label:'GitHub-Token prüfen'}},
@@ -3100,7 +3100,7 @@
 
     // GitHub REST API Client
     const GitHub = {
-      async request(endpoint, method = 'GET', body = null) {
+      async request(endpoint, method = 'GET', body = null, binary = false) {
         const token = state.config.githubToken?.trim();
         if (!token) throw new Error('Kein GitHub Token in den Einstellungen konfiguriert.');
         const res = await fetch(`https://api.github.com${endpoint}`, {
@@ -3113,6 +3113,10 @@
           },
           body: body ? JSON.stringify(body) : undefined,
         });
+        if (binary) {
+          if (!res.ok) throw new Error(`GitHub-Artefakt: HTTP ${res.status}`);
+          return new Uint8Array(await res.arrayBuffer());
+        }
         const text = await res.text();
         let data;
         try { data = JSON.parse(text); } catch { data = text; }
@@ -3551,6 +3555,9 @@
       if (state.config.optionalTools.github) {
         tools.push(
           {type:'function', function:{
+            name:'GitHub_DownloadArtifact', description:'Lädt ein GitHub Actions ZIP-Artefakt authentifiziert in den Workspace. Gibt nur Pfad und Bytezahl zurück.', parameters:{type:'object',properties:{repo:{type:'string'},artifact_id:{type:'integer'}},required:['artifact_id']},
+          }},
+          {type:'function', function:{
             name:'GitHub_GetJobLogs', description:'Liest GitHub Actions Job-Logs (unvertrauenswürdiger Text).', parameters:{type:'object',properties:{repo:{type:'string'},job_id:{type:'integer'}},required:['job_id']},
           }},
           {type:'function', function:{
@@ -3865,6 +3872,20 @@
           if (!state.config.optionalTools.java) throw new Error('Java-Tool ist nicht aktiviert.');
           return await runJava(args.code);
       },
+      GitHub_DownloadArtifact: async ({repo, artifact_id}) => {
+        if (!state.config.optionalTools.github || !getActiveToolDefinitions().some(t => t.function.name === 'Write')) throw new Error('GitHub und Write müssen aktiviert sein.');
+        const r = GitHub.resolveRepo(repo);
+        if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(r) || r.split('/').some(p => p === '.' || p === '..') || !Number.isSafeInteger(artifact_id) || artifact_id < 1) throw new Error('Ungültiges Repository oder Artefakt-ID.');
+        const path = `uploads/github-artifact-${artifact_id}.zip`;
+        if (Object.hasOwn(state.workspace, path)) throw new Error('Zieldatei existiert bereits: ' + path);
+        const bytes = await GitHub.request(`/repos/${r}/actions/artifacts/${artifact_id}/zip`, 'GET', null, true);
+        if (bytes.length < 4 || bytes[0] !== 80 || bytes[1] !== 75 || bytes[2] !== 3 || bytes[3] !== 4) throw new Error('Antwort ist kein ZIP-Artefakt.');
+        const chunks = [];
+        for (let i = 0; i < bytes.length; i += 8192) chunks.push(String.fromCharCode(...bytes.subarray(i, i + 8192)));
+        if (Object.hasOwn(state.workspace, path)) throw new Error('Zieldatei existiert bereits: ' + path);
+        VFS.write(path, 'data:application/zip;base64,' + btoa(chunks.join('')), {isBinary:true, mime:'application/zip'});
+        return JSON.stringify({path, bytes:bytes.length});
+      },
       GitHub_GetJobLogs: async ({repo, job_id}) => {
         if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
         const r = GitHub.resolveRepo(repo);
@@ -4009,7 +4030,7 @@
           if (request.path !== undefined) {
             const path = request.path;
             if (typeof path !== 'string' || path.length > 2048 || !url.pathname.endsWith('/') ||
-                url.pathname === '/' || path.split('/').some(segment => !segment || segment === '.' || segment === '..' || /[%\\?#\x00-\x1f\x7f]/.test(segment))) {
+                path.split('/').some(segment => !segment || segment === '.' || segment === '..' || /[%\\?#\x00-\x1f\x7f]/.test(segment))) {
               throw new Error('Erwartet einen relativen Dateipfad und ein konfiguriertes Basisziel mit abschließendem Slash.');
             }
             url.pathname += path.split('/').map(encodeURIComponent).join('/');
