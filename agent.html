@@ -1558,7 +1558,7 @@
             <button class="btn btn-danger btn-sm" id="btnResetAll">Alles zurücksetzen</button>
           </div>
         </div>
-      <details style="padding: 12px"><summary>Tools im aktuellen Chat</summary><p>Änderungen werden direkt gespeichert.</p><div id="toolSettingsList"></div></details>
+      <section style="padding: 12px" aria-labelledby="toolSettingsHeading"><h3 id="toolSettingsHeading">Tools im aktuellen Chat</h3><div id="toolSettingsList"></div></section>
       </div>
       <div class="modal-foot">
         <button class="btn btn-outline" id="btnCancelSettings">Abbrechen</button>
@@ -1908,31 +1908,6 @@
           });
           target.append('Festes HTTP(S)-Ziel (HTTP ist unverschlüsselt) für ' + field.key, url, urlError);
           container.append(target);
-          const named = document.createElement('label');
-          named.className = 'field';
-          const editor = document.createElement('textarea');
-          const error = document.createElement('span');
-          bindFieldError(editor, error);
-          const prefix = key + ':';
-          editor.value = [...readToolSettings(scope)].filter(([k]) => k.startsWith(prefix)).map(([k,v]) => k.slice(prefix.length) + '=' + v).join('\n');
-          editor.addEventListener('change', () => {
-            try {
-              const targets = new Map();
-              for (const line of editor.value.split('\n').map(line => line.trim()).filter(Boolean)) {
-                const match = /^([A-Za-z][A-Za-z0-9_-]{0,39})=(.+)$/.exec(line);
-                if (!match || targets.has(match[1])) throw new Error('Erwartet eindeutige Einträge: name=URL.');
-                const u = new URL(match[2]);
-                if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.hash || u.search) throw new Error(urlHelp);
-                targets.set(match[1], u.href);
-              }
-              const values = readToolSettings(scope);
-              for (const k of values.keys()) if (k.startsWith(prefix)) values.delete(k);
-              for (const [name, href] of targets) values.set(prefix + name, href);
-              localStorage.setItem(settingsKey + scope, JSON.stringify([...values]));
-            } catch (err) { showFieldError(editor, error, err.message); }
-          });
-          named.append('Benannte HTTP(S)-Ziele für ' + field.key + ' (ein name=URL pro Zeile)', editor, error);
-          container.append(named);
         }
       }
     }
@@ -4815,6 +4790,11 @@
           renderCustomFields('group:' + group, groupFields, shared);
           section.append(shared);
         }
+        const toolList = document.createElement('details');
+        const summary = document.createElement('summary');
+        summary.textContent = `Einzelne Tools (${tools.length})`;
+        toolList.append(summary);
+        section.append(toolList);
         groupToggle.disabled = !tools.length;
         const toggles = [];
         function syncGroup() {
@@ -4892,7 +4872,7 @@
             });
             row.append(reset);
           }
-          section.append(row);
+          toolList.append(row);
         }
         syncGroup();
         panel.append(section);
