@@ -1,6 +1,10 @@
 """Regression test for the Lebedev checker; no network or extra packages."""
-import subprocess
+import io
+import runpy
 import sys
+from contextlib import redirect_stdout, redirect_stderr
+from types import SimpleNamespace
+from unittest.mock import patch
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,8 +26,13 @@ class SphereCheckerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'rule.txt'
             path.write_text(text)
-            return subprocess.run([sys.executable, str(CHECKER), str(path), str(degree)],
-                                  capture_output=True, text=True)
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with patch.object(sys, 'argv', [str(CHECKER), str(path), str(degree)]), \
+                    redirect_stdout(stdout), redirect_stderr(stderr):
+                with self.assertRaises(SystemExit) as exit_info:
+                    runpy.run_path(str(CHECKER), run_name='__main__')
+            return SimpleNamespace(returncode=exit_info.exception.code,
+                                   stdout=stdout.getvalue(), stderr=stderr.getvalue())
 
     def test_published_rule(self):
         for degree, status in [(3, 0), (4, 1)]:
