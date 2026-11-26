@@ -3700,10 +3700,11 @@
             if (!field || typeof args.target !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(args.target) || typeof args.value !== 'string') throw new Error('Ungültiges benanntes Ziel.');
             const prefix = 'endpoint:' + field.key;
             const base = new URL(values.get(prefix));
-            // Preserve the origin and, for loopback proxies, the upstream route prefix.
+            // Scope automatic target creation to the origin and route of the configured endpoint.
             if (!/^\/(?!\/)/.test(args.value) || /[%\\?#\s]/.test(args.value) || args.value.split('/').some(part => part === '.' || part === '..')) throw new Error('Erwartet einen absoluten URL-Pfad ohne Query oder Fragment.');
             const target = new URL(args.value, base);
-            if (target.origin !== base.origin || (['localhost','127.0.0.1','[::1]'].includes(base.hostname) && (!base.pathname.split('/')[1] || target.pathname.split('/')[1] !== base.pathname.split('/')[1]))) throw new Error('Ziel liegt außerhalb der konfigurierten Route.');
+            const route = base.pathname.split('/')[1];
+            if (target.origin !== base.origin || !route || target.pathname.split('/')[1] !== route) throw new Error('Ziel liegt außerhalb der konfigurierten Route.');
             values.set(prefix + ':' + args.target, target.href);
             localStorage.setItem(settingsKey + scope,JSON.stringify([...values]));
             return JSON.stringify({target:args.target,endpoint:target.href});
