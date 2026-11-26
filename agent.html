@@ -2579,7 +2579,7 @@
     /* =========================================================================
        6. OPTIONAL RUNTIMES: PYTHON (PYODIDE), JAVASCRIPT, JAVA, GITHUB
        ========================================================================= */
-    async function ensurePyodide() {
+    async function ensurePyodide(onFallback) {
       if (state.pyodide) return state.pyodide;
       if (state.pyodideLoading) return state.pyodideLoading;
       state.pyodideLoading = (async () => {
@@ -2595,6 +2595,7 @@
         }
         const startupErrors = [];
         let py;
+        let fallbackNotice = '';
         try {
           const indexURL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
           let archive;
@@ -2608,9 +2609,10 @@
                 throw new Error('Antwort ist kein ZIP-Archiv');
               }
               archive = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
+              if (failures.length) fallbackNotice = `Python-Standardbibliothek über Ersatz-URL geladen: ${url}`;
               break;
             } catch (error) {
-              failures.push(url + ': ' + error.message);
+              failures.push(`${url}: ${error.name}: ${error.message}`);
             }
           }
           if (!archive) throw new Error('Python-Standardbibliothek konnte nicht geladen werden: ' + failures.join('; '));
@@ -2631,7 +2633,8 @@
           throw new Error('Python konnte nicht initialisiert werden: ' + (error?.message || String(error)) + (detail ? '\n' + detail : ''), { cause: error });
         }
         state.pyodide = py;
-        toast('Python (Pyodide) bereit!', 'success');
+        if (fallbackNotice) onFallback(fallbackNotice);
+        toast(fallbackNotice || 'Python (Pyodide) bereit!', 'success');
         return py;
       })();
       try {
@@ -2643,7 +2646,8 @@
     }
 
     async function runPython(code, packages = []) {
-      const py = await ensurePyodide();
+      let startupNotice = '';
+      const py = await ensurePyodide(notice => { startupNotice = notice; });
       if (Array.isArray(packages) && packages.length) {
         await py.loadPackage(packages);
       }
@@ -2719,8 +2723,8 @@
       }
 
       const out = logs.join('\n');
-      if (out && resultVal) return `${out}\n=> ${resultVal}`;
-      return out || resultVal || '(Ausführung ohne Ausgabe abgeschlossen)';
+      if (out && resultVal) return [startupNotice, `${out}\n=> ${resultVal}`].filter(Boolean).join('\n');
+      return [startupNotice, out || resultVal || '(Ausführung ohne Ausgabe abgeschlossen)'].filter(Boolean).join('\n');
     }
 
     async function runJavaScript(code) {
