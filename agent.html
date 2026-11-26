@@ -1901,9 +1901,8 @@
                 let parsed;
                  try { parsed = new URL(url.value.trim()); } catch { throw new Error(urlHelp); }
                 if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.hash || parsed.search) throw new Error(urlHelp);
-                if (values.get(key) !== parsed.href) values.delete('basic-http:' + field.key);
                 values.set(key, parsed.href);
-              } else { values.delete(key); values.delete('basic-http:' + field.key); }
+              } else values.delete(key);
               localStorage.setItem(settingsKey + scope, JSON.stringify([...values]));
             } catch (error) { showFieldError(url, urlError, error.message); }
           });
@@ -1928,22 +1927,6 @@
           });
           authLabel.append('Basic-Auth-Benutzername für ' + field.key + ' (leer = Bearer)', username);
           container.append(authLabel);
-          const insecureLabel = document.createElement('label');
-          insecureLabel.className = 'field';
-          const insecure = document.createElement('input');
-          insecure.type = 'checkbox';
-          const insecureKey = 'basic-http:' + field.key;
-          insecure.checked = readToolSettings(scope).get(insecureKey) === url.value && !!url.value;
-          url.addEventListener('change', () => { insecure.checked = false; });
-          insecure.addEventListener('change', () => {
-            const values = readToolSettings(scope);
-            const endpoint = values.get(key);
-            if (insecure.checked && endpoint?.startsWith('http://')) values.set(insecureKey, endpoint);
-            else { values.delete(insecureKey); insecure.checked = false; }
-            localStorage.setItem(settingsKey + scope, JSON.stringify([...values]));
-          });
-          insecureLabel.append(insecure, 'Basic Auth für dieses konfigurierte HTTP-Ziel erlauben (unverschlüsselt)');
-          container.append(insecureLabel);
         }
       }
     }
@@ -3797,7 +3780,6 @@
             url.searchParams.set(key, value);
           }
           const basicUser = values.get('basic-user:' + field.key);
-          if (basicUser && url.protocol !== 'https:' && values.get('basic-http:' + field.key) !== endpoint) throw new Error('Basic Auth erfordert HTTPS oder eine explizite Freigabe für das konfigurierte HTTP-Ziel.');
           const authorization = basicUser ? 'Basic ' + btoa(Array.from(new TextEncoder().encode(basicUser + ':' + token), byte => String.fromCharCode(byte)).join('')) : 'Bearer ' + token;
           const response = await fetch(url, {method, body:bodyInput, credentials:'omit', redirect:'error', referrerPolicy:'no-referrer', signal:AbortSignal.timeout(10000), headers:{Authorization:authorization, ...(contentType === undefined ? {} : {'Content-Type':contentType})}});
           const reader = response.body?.getReader();
