@@ -1,0 +1,18 @@
+name: SciPy browser fallback
+on: [pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --no-save playwright@1.51.1
+      - run: npx playwright install --with-deps chromium
+      - run: python3 scripts/stage-scipy-mirror.py .
+      - run: |
+          python3 -m http.server 8000 &
+          trap 'kill $!' EXIT
+          curl -fsS --retry 5 --retry-connrefused http://localhost:8000/agent.html -o /dev/null
+          node tests/scipy-browser.cjs
