@@ -3428,13 +3428,13 @@
           type: 'function',
           function: {
             name: 'RunJavaScript',
-            description: 'Führt direkt übergebenen JavaScript-Code in einer Browser-Sandbox aus. Die CSP blockiert eval() und new Function(); workspace.read liest Dateien nur als Text. Verfügbar: console.log und workspace.{list,read,write,delete}.',
+            description: 'Führt JavaScript in einer Browser-Sandbox aus. Genau eines angeben: code oder file_path zu einer .js-Datei im Workspace. Die CSP blockiert eval() und new Function(); workspace.read liest Dateien nur als Text. Verfügbar: console.log und workspace.{list,read,write,delete}.',
             parameters: {
               type: 'object',
               properties: {
-                code: { type: 'string', description: 'Auszuführender JavaScript-Code' },
+                code: { type: 'string', description: 'Direkt auszuführender JavaScript-Code, ohne file_path' },
+                file_path: { type: 'string', description: 'Relativer Workspace-Pfad zu einer .js-Datei, ohne code' },
               },
-              required: ['code'],
             },
           },
         });
@@ -3753,7 +3753,19 @@
       },
       RunJavaScript: async (args) => {
           if (!state.config.optionalTools.javascript) throw new Error('JavaScript-Tool ist nicht aktiviert.');
-          return await runJavaScript(args.code);
+          const hasCode = Object.hasOwn(args, 'code');
+          const hasPath = Object.hasOwn(args, 'file_path');
+          if (hasCode === hasPath || (hasCode && typeof args.code !== 'string') ||
+              (hasPath && (typeof args.file_path !== 'string' || !args.file_path.trim()))) {
+            throw new Error('Genau eines angeben: code oder file_path.');
+          }
+          if (hasCode) return await runJavaScript(args.code);
+          const path = normalizePath(args.file_path);
+          const file = Object.hasOwn(state.workspace, path) ? state.workspace[path] : null;
+          if (getExt(path) !== 'js' || !file || file.isBinary || typeof file.content !== 'string') {
+            throw new Error('JavaScript-Textdatei im Workspace nicht gefunden: ' + path);
+          }
+          return await runJavaScript(file.content);
       },
       RunJava: async (args) => {
           if (!state.config.optionalTools.java) throw new Error('Java-Tool ist nicht aktiviert.');
