@@ -1953,7 +1953,7 @@
             }
           }
           const session = pl.create(100000);
-          await new Promise((success, error) => session.consult(data.program, {success, error, file:false, url:false, html:false}));
+          await new Promise((success, error) => session.consult(data.program, {success, error, file:false, url:false, html:false, script:false}));
           await new Promise((success, error) => session.query(data.query, {success, error}));
           const answers = [];
           let status = 'complete';
