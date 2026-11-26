@@ -1,0 +1,26 @@
+name: Check Pyodide SciPy wheel
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/check-scipy-wheel.yml'
+  workflow_dispatch:
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Download and verify SciPy wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://cdn.jsdelivr.net/pyodide/v0.26.4/full
+          temp=$(mktemp -d)
+          trap 'rm -rf "$temp"' EXIT
+          cd "$temp"
+          curl --fail --silent --show-error --location --max-time 20 -o lock.json "$base/pyodide-lock.json"
+          wheel=$(jq -er '.packages.scipy.file_name | select(test("^[a-zA-Z0-9_.-]+[.]whl$"))' lock.json)
+          sha=$(jq -er '.packages.scipy.sha256 | select(test("^[a-f0-9]{64}$"))' lock.json)
+          echo "Checking $base/$wheel"
+          curl --fail --silent --show-error --location --max-time 60 --max-filesize 33554432 --write-out 'HTTP %{http_code}; bytes=%{size_download}; seconds=%{time_total}\n' -o "$wheel" "$base/$wheel"
+          printf '%s  %s\n' "$sha" "$wheel" | sha256sum --check
