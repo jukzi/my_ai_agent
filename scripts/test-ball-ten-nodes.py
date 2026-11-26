@@ -1,5 +1,10 @@
 """Exact regression checks for the unit-ball reproducing kernel."""
+import io
 import runpy
+import sys
+from contextlib import redirect_stderr, redirect_stdout
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 import unittest
 from fractions import Fraction as F
 from itertools import product
@@ -41,6 +46,33 @@ class BallKernelTest(unittest.TestCase):
         for r in (F(0), F(1, 2), F(1)):
             u = (r, F(0), F(0))
             self.assertEqual(kernel(u, u), F(100, 21) + F(105, 4)*(r*r-F(5, 21))**2)
+
+
+class BallCheckerCliTest(unittest.TestCase):
+    def check(self, text):
+        checker = Path(__file__).with_name('check-ball-ten-nodes.py')
+        with TemporaryDirectory() as directory:
+            table = Path(directory) / 'nodes.txt'
+            table.write_text(text)
+            out, err = io.StringIO(), io.StringIO()
+            with patch.object(sys, 'argv', [str(checker), str(table)]), redirect_stdout(out), redirect_stderr(err):
+                with self.assertRaises(SystemExit) as result:
+                    runpy.run_path(str(checker), run_name='__main__')
+        return result.exception.code, out.getvalue(), err.getvalue()
+
+    def test_inexact_nodes_report_exact_pair_residual(self):
+        status, out, _ = self.check(''.join(f'{i}/10 0 0\n' for i in range(10)))
+        self.assertEqual(status, 1)
+        self.assertIn('K(1, 2) = 493/80', out)
+
+    def test_invalid_nodes(self):
+        distinct = ''.join(f'{i}/10 0 0\n' for i in range(9))
+        for text, diagnosis in [('0 0 0\n' * 10, 'ten distinct triples'),
+                                (distinct + '11/10 0 0\n', 'outside the unit ball')]:
+            with self.subTest(diagnosis=diagnosis):
+                status, _, err = self.check(text)
+                self.assertEqual(status, 2)
+                self.assertIn(diagnosis, err)
 
 
 if __name__ == '__main__':
