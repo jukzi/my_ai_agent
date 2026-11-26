@@ -1908,6 +1908,25 @@
           });
           target.append('Festes HTTP(S)-Ziel (HTTP ist unverschlüsselt) für ' + field.key, url, urlError);
           container.append(target);
+          const authLabel = document.createElement('label');
+          authLabel.className = 'field';
+          const username = document.createElement('input');
+          const authKey = 'basic-user:' + field.key;
+          username.value = readToolSettings(scope).get(authKey) || '';
+          username.addEventListener('change', () => {
+            const value = username.value.trim();
+            username.setCustomValidity('');
+            if (/[:\x00-\x1f\x7f]/.test(value)) {
+              username.setCustomValidity('Basic-Auth-Benutzername enthält ungültige Zeichen.');
+              username.reportValidity();
+              return;
+            }
+            const values = readToolSettings(scope);
+            if (value) values.set(authKey, value); else values.delete(authKey);
+            localStorage.setItem(settingsKey + scope, JSON.stringify([...values]));
+          });
+          authLabel.append('Basic-Auth-Benutzername für ' + field.key + ' (leer = Bearer)', username);
+          container.append(authLabel);
         }
       }
     }
@@ -3760,7 +3779,10 @@
             if (!key || key.length > 128 || typeof value !== 'string' || value.length > 2048) throw new Error('Ungültiger Query-Parameter.');
             url.searchParams.set(key, value);
           }
-          const response = await fetch(url, {method, body:bodyInput, credentials:'omit', redirect:'error', referrerPolicy:'no-referrer', signal:AbortSignal.timeout(10000), headers:{Authorization:'Bearer ' + token, ...(contentType === undefined ? {} : {'Content-Type':contentType})}});
+          const basicUser = values.get('basic-user:' + field.key);
+          if (basicUser && url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(url.hostname))) throw new Error('Basic Auth erfordert HTTPS oder einen lokalen Loopback-Proxy.');
+          const authorization = basicUser ? 'Basic ' + btoa(Array.from(new TextEncoder().encode(basicUser + ':' + token), byte => String.fromCharCode(byte)).join('')) : 'Bearer ' + token;
+          const response = await fetch(url, {method, body:bodyInput, credentials:'omit', redirect:'error', referrerPolicy:'no-referrer', signal:AbortSignal.timeout(10000), headers:{Authorization:authorization, ...(contentType === undefined ? {} : {'Content-Type':contentType})}});
           const reader = response.body?.getReader();
           const decoder = new TextDecoder();
           let bytes = 0, body = '';
