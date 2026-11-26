@@ -3432,7 +3432,7 @@
         return description ? {...tool, function:{...tool.function, description}} : tool;
       });
       const custom = getCustomDefinitions().filter(tool => chat.customEnabled?.[tool.function.name] === true);
-      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liest normale Werte und den Status von Credentials. setConfig setzt einen Wert mit field und value; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten HTTP-Aufruf an das vom Nutzer hinterlegte Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String,target?:String (Name eines vom Nutzer hinterlegten Ziels),method?:String (Standard GET),path?:relativer Dateipfad (Basisziel endet auf /),query?:Objekt mit Stringwerten,body?:String,contentType?:String}} zurück. Liefert HTTP-Status und Antworttext bis 64 KiB. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für Vorschauen gib {display:{kind:"html" oder "image",path:String}} für eine Workspace-Datei zurück. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
+      const manage = {type:'function',function:{name:'ManageJavaScriptTool',description:'save kann eine Gruppe angeben. defineGroup definiert gemeinsame Felder anhand eines aktiven eigenen Tools. scope=group greift auf gemeinsame Werte zu. getConfig liefert Gruppe, Felder, Credential-Status und konfigurierte Ziel-URLs ohne Token. setConfig setzt mit field und value einen Wert; mit target und einem absoluten URL-Pfad als value wird ein benanntes Ziel an der bestehenden Credential-Origin eingerichtet; keine Geheimnisse im Chat eingeben. Speichert oder löscht ein eigenes Tool oder ersetzt einen eingebauten Handler appweit. Löschen eines Ersatzes stellt den Originalhandler wieder her. JavaScript: Funktion (args, {text}) => JSON-Wert; file_path liefert optional Workspace-Text. Für einen authentifizierten HTTP-Aufruf an das vom Nutzer hinterlegte Ziel gib {requestConfigured:{scope:"tool" oder "group",credential:String,target?:String (Name eines vom Nutzer hinterlegten Ziels),method?:String (Standard GET),path?:relativer Dateipfad (Basisziel endet auf /),query?:Objekt mit Stringwerten,body?:String,contentType?:String}} zurück. Liefert HTTP-Status und Antworttext bis 64 KiB. Für einen Workspace-Schreibauftrag gib {writeText:{path:String,content:String}} zurück (nur wenn Write aktiv ist). Für Vorschauen gib {display:{kind:"html" oder "image",path:String}} für eine Workspace-Datei zurück. Für eine Tabelle gib {table:{headers:[String],rows:[[String]]}} zurück. Kein Netzwerk.',parameters:{type:'object',properties:{action:{type:'string',enum:['save','delete','getConfig','setConfig','defineGroup']},name:{type:'string'},group:{type:'string'},scope:{type:'string',enum:['tool','group']},field:{type:'string'},value:{type:'string'},target:{type:'string'},description:{type:'string'},javascript:{type:'string'},fields:{type:'array',items:{type:'object',properties:{key:{type:'string'},credential:{type:'boolean'}},required:['key','credential']}}},required:['action','name']}}};
       return [...builtins, ...custom, management, ...(state.config.optionalTools.javascript ? [manage] : [])];
     }
 
@@ -3685,7 +3685,29 @@
           const scope = args.scope === 'group' ? 'group:' + customGroup(tool) : key;
           const fields = args.scope === 'group' ? readGroupFields().get(customGroup(tool)) || [] : tool.fields || [];
           const values = readToolSettings(scope);
-          if (action === 'getConfig') return JSON.stringify(Object.fromEntries(fields.map(field => [field.key,field.credential ? {configured:values.has(field.key)} : values.get(field.key) ?? ''])));
+          if (action === 'getConfig') return JSON.stringify({
+            group:customGroup(tool), scope:args.scope === 'group' ? 'group' : 'tool',
+            fields:Object.fromEntries(fields.map(field => {
+              const prefix = 'endpoint:' + field.key;
+              return [field.key, field.credential ? {
+                configured:values.has(field.key), endpoint:values.get(prefix) ?? null,
+                targets:Object.fromEntries([...values].filter(([k]) => k.startsWith(prefix + ':')).map(([k,v]) => [k.slice(prefix.length + 1),v]))
+              } : values.get(field.key) ?? ''];
+            }))
+          });
+          if (args.target !== undefined) {
+            const field = fields.find(f => f.credential && f.key === args.field);
+            if (!field || typeof args.target !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(args.target) || typeof args.value !== 'string') throw new Error('Ungültiges benanntes Ziel.');
+            const prefix = 'endpoint:' + field.key;
+            const base = new URL(values.get(prefix));
+            // Preserve the origin and, for loopback proxies, the upstream route prefix.
+            if (!/^\/(?!\/)/.test(args.value) || /[%\\?#\s]/.test(args.value) || args.value.split('/').some(part => part === '.' || part === '..')) throw new Error('Erwartet einen absoluten URL-Pfad ohne Query oder Fragment.');
+            const target = new URL(args.value, base);
+            if (target.origin !== base.origin || (['localhost','127.0.0.1','[::1]'].includes(base.hostname) && (!base.pathname.split('/')[1] || target.pathname.split('/')[1] !== base.pathname.split('/')[1]))) throw new Error('Ziel liegt außerhalb der konfigurierten Route.');
+            values.set(prefix + ':' + args.target, target.href);
+            localStorage.setItem(settingsKey + scope,JSON.stringify([...values]));
+            return JSON.stringify({target:args.target,endpoint:target.href});
+          }
           const field = fields.find(field => field.key === args.field);
           if (!field || typeof args.value !== 'string' || args.value.length > 10000) throw new Error('Ungültiger Konfigurationswert.');
           if (args.value) values.set(field.key,args.value); else { values.delete(field.key); for (const k of values.keys()) if (k === 'endpoint:' + field.key || k.startsWith('endpoint:' + field.key + ':')) values.delete(k); }
