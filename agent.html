@@ -2649,7 +2649,36 @@
       let startupNotice = '';
       const py = await ensurePyodide(notice => { startupNotice = notice; });
       if (Array.isArray(packages) && packages.length) {
-        await py.loadPackage(packages);
+        const started = performance.now();
+        const messages = [];
+        const failures = [];
+        // Pyodide can report an individual failure without rejecting loadPackage.
+        const sanitize = (message) => String(message).replace(/https?:\/\/[^\s<>"']+/gi, raw => {
+          try {
+            const url = new URL(raw);
+            return url.origin + url.pathname;
+          } catch { return '[URL]'; }
+        }).slice(0, 500);
+        try {
+          await py.loadPackage(packages, {
+            messageCallback: message => messages.push(sanitize(message)),
+            errorCallback: message => failures.push(sanitize(message)),
+          });
+        } catch (error) {
+          failures.push(sanitize(error?.message || error));
+        }
+        const missing = packages.filter(name => /^[\w-]+$/.test(name) &&
+          !Object.hasOwn(py.loadedPackages, name.toLowerCase().replace(/_/g, '-')));
+        if (failures.length || missing.length) {
+          throw new Error('Pyodide-Paketladen fehlgeschlagen: ' + JSON.stringify({
+            phase: 'loadPackage',
+            packages: packages.map(sanitize),
+            missing,
+            durationMs: Math.round(performance.now() - started),
+            messages: messages.slice(-12),
+            errors: failures.slice(-12),
+          }));
+        }
       }
 
       // Sync VFS -> Pyodide /workspace
