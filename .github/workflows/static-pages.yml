@@ -2,7 +2,7 @@ name: Deploy static MyAiAgent
 on:
   push:
     branches: [main]
-    paths: [agent.html, .github/workflows/static-pages.yml]
+    paths: [agent.html, scripts/stage-scipy-mirror.py, .github/workflows/static-pages.yml]
   workflow_dispatch:
 
 permissions:
@@ -24,6 +24,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
       - name: Stage static site from the triggering commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -36,6 +37,7 @@ jobs:
             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/contents/agent.html?ref=$GITHUB_SHA"
           test -s _site/agent.html
           printf '%s\n' '<!doctype html><meta charset="utf-8"><title>MyAiAgent</title><meta http-equiv="refresh" content="0; url=agent.html"><a href="agent.html">MyAiAgent öffnen</a>' > _site/index.html
+      - run: python3 scripts/stage-scipy-mirror.py _site
       - uses: actions/upload-pages-artifact@v3
         id: upload
         with:
