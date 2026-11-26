@@ -4133,6 +4133,19 @@
     /* =========================================================================
        9. SAFE MARKDOWN RENDERER
        ========================================================================= */
+    function renderUserMessage(content) {
+      const text = String(content ?? '');
+      const trimmed = text.trim();
+      const candidate = /^"(?:[^"\\]|\\.)+"\s*:/.test(trimmed) ? `{${trimmed}}` : trimmed;
+      if (/^[{[]/.test(candidate)) {
+        try {
+          const value = JSON.parse(candidate);
+          if (value && typeof value === 'object') return `<pre><code>${escapeHtml(text)}</code></pre>`;
+        } catch { /* Ordinary prose and Markdown are still supported. */ }
+      }
+      return renderMarkdown(text);
+    }
+
     function renderMarkdown(md) {
       if (!md) return '';
       const codeBlocks = [];
@@ -4443,7 +4456,7 @@
             <div class="msg-row user" data-search-message="${escapeHtml(m.id)}">
               <div class="msg-meta"><span>Du</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
               <div class="msg-bubble">
-                <div class="md-body">${renderMarkdown(m.content)}</div>
+                <div class="md-body">${renderUserMessage(m.content)}</div>
                 ${attsHtml}
               </div>
             </div>
