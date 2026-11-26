@@ -650,8 +650,8 @@
       border: 1px solid var(--border-strong);
       max-width: 88%;
     }
-    #lastChatTiming { position: absolute; right: 12px; bottom: 100%; z-index: 1; pointer-events: none; margin: 0 0 6px; }
-    #lastChatTiming[hidden] { display: none; }
+    .response-timing { display: flex; justify-content: flex-end; margin-top: 6px; }
+    .response-timing .response-time-badge { margin: 0; }
     .response-time-badge {
       display: inline-flex; align-items: center; gap: 4px;
       align-self: flex-start; margin: 2px 0 -2px 8px;
@@ -1444,7 +1444,6 @@
         <div class="chat-messages" id="chatMessages"></div>
 
         <div class="composer-wrap">
-          <span id="lastChatTiming" class="response-time-badge" title="Letzte KI-Antwortzeit ohne Tool-Laufzeiten" hidden></span>
           <div class="message-nav" id="messageNav" role="group" aria-label="Nachrichten-Navigation" hidden>
             <button type="button" class="btn" data-jump="first" title="Erste Nachricht" aria-label="Erste Nachricht">⇈</button>
             <button type="button" class="btn" data-jump="previous" title="Vorherige Nachricht" aria-label="Vorherige Nachricht">↑</button>
@@ -4986,10 +4985,6 @@
       return Boolean(message?.retryable || message?.tool_calls?.some(call => call.status === 'error'));
     }
     function renderChat() {
-      const timing = $('#lastChatTiming');
-      const last = state.chat.findLast(m => m.role === 'assistant' && Number.isFinite(m.modelTimeMs));
-      timing.hidden = !last;
-      timing.textContent = last ? '◷ ' + (last.modelTimeMs / 1000).toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' s' : '';
       const container = $('#chatMessages');
       const oldTop = container.scrollTop;
       const atBottom = container.scrollHeight - container.clientHeight - oldTop <= 24;
@@ -5081,7 +5076,7 @@
           return `
             <div class="msg-row assistant" data-search-message="${escapeHtml(m.id)}">
               <div class="msg-meta"><span>Agent</span><span>${time}</span><button type="button" class="btn btn-sm" data-copy-message="${escapeHtml(m.id)}" title="Nachricht als Text und HTML kopieren">Kopieren</button></div>
-              ${m.content?.trim() ? `<div class="msg-bubble"><div class="md-body">${renderMarkdown(m.content)}</div></div>` : ''}
+              ${m.content?.trim() ? `<div class="msg-bubble"><div class="md-body">${renderMarkdown(m.content)}</div>${Number.isFinite(m.modelTimeMs) ? `<div class="response-timing"><span class="response-time-badge" title="KI-Antwortzeit ohne Tool-Laufzeiten">◷ ${(m.modelTimeMs / 1000).toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1})} s</span></div>` : ''}</div>` : ''}
               ${m === state.chat.at(-1) && canRetryChat(m) ? `<button type="button" class="btn btn-outline btn-sm" data-retry-chat>Erneut versuchen</button>` : ""}
               ${toolsHtml}
             </div>
