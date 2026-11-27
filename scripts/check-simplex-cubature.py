@@ -28,6 +28,8 @@ def main(argv=None):
                         help='verify exact permutation symmetry and check one moment per orbit')
     parser.add_argument('--cartesian', action='store_true',
                         help='read d reference-simplex coordinates and append the missing barycentric coordinate')
+    parser.add_argument('--integral-weights', action='store_true',
+                        help='convert reference-element integral weights to mean weights')
     args = parser.parse_args(argv)
     d = args.dimension
     try:
@@ -48,6 +50,8 @@ def main(argv=None):
                 row = (*coords, 1 - sum(coords), weight)
             if len(row) != d + 2 or min(row) <= 0 or abs(sum(row[:-1])-1) > tol:
                 raise ValueError(f'line {i}: expected positive barycentric coordinates summing to one and a positive weight')
+            if args.integral_weights:
+                row = (*row[:-1], row[-1] * factorial(d))
             rows.append(row)
         if not rows:
             raise ValueError('empty table')
