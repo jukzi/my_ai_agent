@@ -1,7 +1,14 @@
 (() => {
   const polarPoint=(r,a)=>[.5+r*Math.cos(a),.5+r*Math.sin(a)];
   const radicalInverse=(n,base)=>{let value=0, place=1/base;while(n){value+=(n%base)*place;n=Math.floor(n/base);place/=base;}return value;};
+  // Fixed seed keeps the example reproducible across reloads.
+  function randomExample(){
+    let seed=407;
+    function next(){seed=(Math.imul(1664525,seed)+1013904223)>>>0;return seed/4294967296;}
+    return Array.from({length:64},()=>[next(),next()]);
+  }
   const cases = {
+    randomSquare: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]],pointSize:3.5,points:randomExample()},
     halton: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]],pointSize:3.5,
       points:Array.from({length:64},(_,i)=>[radicalInverse(i+1,2),radicalInverse(i+1,3)])},
     noise: {v:[[0,0],[1,0],[0,1]],faces:[],noise:true,

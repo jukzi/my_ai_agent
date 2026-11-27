@@ -13,3 +13,5 @@ h3{line-height:1.3;margin-top:1.5em}table{display:block;overflow:auto}.kapitel u
 .viewer-controls svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .kubatur-figure figcaption{margin-top:.65rem;color:#34545e;font-size:.92em;line-height:1.5}
 .kubatur-figure [data-kubatur-viewer]:fullscreen{max-width:none;background:#102e38;grid-template-columns:min(96vw,calc((100vh - 78px)*640/420));grid-template-rows:auto auto}
+
+.kubatur-comparison{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr));gap:1rem;align-items:start}.kubatur-comparison .kubatur-figure{margin:.5rem 0;min-width:0}
