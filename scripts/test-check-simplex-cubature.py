@@ -16,6 +16,14 @@ class SimplexCheckerTest(unittest.TestCase):
             path.write_text(text)
             return main([str(path), str(dimension), str(degree), *options])
 
+    def test_published_strang5_table(self):
+        path = Path(__file__).with_name('strang5-barycentric.txt')
+        with redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(main([str(path), '2', '4', '--tol', '1e-14']), 0)
+            self.assertIn('Momentrest: 1/1000000000000000', output.getvalue())
+            self.assertEqual(main([str(path), '2', '5', '--tol', '1e-14']), 1)
+        self.assertIn('Exponenten: (5, 0, 0)', output.getvalue())
+
     def test_triangle_exact_degree(self):
         table = '2/3 1/6 1/6 1/3\n1/6 2/3 1/6 1/3\n1/6 1/6 2/3 1/3\n'
         with redirect_stdout(io.StringIO()) as out:
