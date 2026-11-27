@@ -2168,7 +2168,7 @@
       return makeRuntime(stateForChat, chat);
     }
     const defaultToolGroups = {
-      GitHub: {tools:['GitHub_DownloadArtifact','GitHub_ReadFile','GitHub_GetJobLogs','GitHub_ListPRFiles','GitHub_CreateBranch','GitHub_CommitFile','GitHub_CommitFiles','GitHub_CreatePR'], fields:[
+      GitHub: {tools:['GitHub_DownloadArtifact','GitHub_ReadFile','GitHub_GetJobLogs','GitHub_ListPRFiles','GitHub_CreateBranch','GitHub_CommitFile','GitHub_CommitFiles','GitHub_API','GitHub_CreatePR'], fields:[
         {id:'cfgGithubToken', label:'Personal Access Token', credential:true},
         {id:'cfgGithubRepo', label:'Standard-Repository (owner/repo)', credential:false},
       ], check:{id:'btnCheckGithub', status:'githubCheckStatus', label:'GitHub-Token prüfen'}},
@@ -3302,10 +3302,14 @@
       async commitFiles({repo, branch, expected_head, message, files}) {
         if (!/^[a-f0-9]{40}$/.test(expected_head || '') || !branch || !message?.trim() || !Array.isArray(files) || !files.length || files.length > 100) throw new Error('Branch, erwarteter HEAD, Nachricht und 1–100 Dateien erforderlich.');
         const paths = new Set();
-        const tree = files.map(({path, content, workspace_path}) => {
+        const tree = files.map(({path, content, workspace_path, delete: remove}) => {
           const target = normalizePath(path);
           if (!target || paths.has(target)) throw new Error(`Ungültiger oder doppelter Pfad: ${path}`);
           paths.add(target);
+          if (remove === true) {
+            if (content !== undefined || workspace_path !== undefined) throw new Error('Löschen darf keinen Dateiinhalt angeben.');
+            return {path:target, type:'blob', mode:'100644', sha:null};
+          }
           if (workspace_path !== undefined) {
             if (content !== undefined) throw new Error('content oder workspace_path angeben, nicht beides.');
             const file = VFS.get(workspace_path);
@@ -3329,6 +3333,7 @@
         for (const entry of tree) {
           const previous = existing.get(entry.path);
           if (previous && !['100644','100755'].includes(previous.mode)) throw new Error(`Keine reguläre Datei: ${entry.path}`);
+          if (entry.sha === null && !previous) throw new Error(`Datei zum Löschen fehlt: ${entry.path}`);
           if (previous) entry.mode = previous.mode;
         }
         const next = await this.request(`${root}/trees`, 'POST', {base_tree:parent.tree.sha, tree});
@@ -3803,10 +3808,13 @@
               description: 'Schreibt mehrere Textdateien in einen Commit, ohne Force-Push.',
               parameters: {type:'object', required:['branch','expected_head','message','files'], properties:{
                 repo:{type:'string'}, branch:{type:'string'}, expected_head:{type:'string'}, message:{type:'string'},
-                files:{type:'array', items:{type:'object', required:['path'], properties:{path:{type:'string'}, content:{type:'string'}, workspace_path:{type:'string'}}}},
+                files:{type:'array', items:{type:'object', required:['path'], properties:{path:{type:'string'}, content:{type:'string'}, workspace_path:{type:'string'}, delete:{type:'boolean',description:'Vorhandene reguläre Datei löschen'}}}},
               }},
             },
           },
+          {type:'function', function:{name:'GitHub_API',
+            description:'GitHub REST oder GraphQL mit der bestehenden Verbindung aufrufen. Schreibende und löschende Aktionen nur mit ausdrücklichem Nutzerauftrag.',
+            parameters:{type:'object', required:['path'], properties:{path:{type:'string',description:'API-Pfad inklusive optionaler Query, etwa /repos/owner/repo/issues oder /graphql'}, method:{type:'string',enum:['GET','POST','PUT','PATCH','DELETE','HEAD']}, body:{type:'object'}}}}},
           {
             type: 'function',
             function: {
@@ -4105,6 +4113,14 @@
       GitHub_CommitFiles: async (args) => {
         if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
         return JSON.stringify(await GitHub.commitFiles(args), null, 2);
+      },
+      GitHub_API: async ({path, method = 'GET', body}) => {
+        if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
+        if (typeof path !== 'string' || !/^\/(?![\/\\])/.test(path) || /[\\#\u0000-\u0020]/.test(path)) throw new Error('Relativer GitHub-API-Pfad erforderlich.');
+        if (!['GET','POST','PUT','PATCH','DELETE','HEAD'].includes(method)) throw new Error('Ungültige HTTP-Methode.');
+        if (body !== undefined && ['GET','HEAD'].includes(method)) throw new Error('Diese Methode erlaubt keinen Body.');
+        const result = await GitHub.request(path, method, body ?? null, false, 'no-store');
+        return (JSON.stringify(result) ?? 'null').slice(0, 65536);
       },
       GitHub_CreatePR: async (args) => {
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
