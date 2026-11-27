@@ -11,7 +11,9 @@
     const x=(i%11)/10,y=Math.floor(i/11)/10;
     return [x,(x*x+y*y)/2,y];
   });
+  const triangleOutline={v:[[0,0],[1,0],[0,1]],faces:[[0,1,2]]};
   const cases = {
+    triangleEdges: {...triangleOutline,points:[[.5,0],[.5,.5],[0,.5]]},
     terrain: {v:terrainVertices,faces:Array.from({length:100},(_,i)=>{
       const j=Math.floor(i/10)*11+i%10;return [j,j+1,j+12,j+11];
     }),points:[.25,.75].flatMap(x=>[.25,.75].map(y=>[x,(x*x+y*y)/2,y]))},
