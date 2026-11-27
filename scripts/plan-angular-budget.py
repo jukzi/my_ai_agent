@@ -31,6 +31,8 @@ def main(argv=None):
                         help='find the smallest budget up to --budget with bound <= EPS')
     parser.add_argument('--radial-bound', default='0',
                         help='fixed radial error bound added to the angular bound')
+    parser.add_argument('--details', action='store_true',
+                        help='show the weighted angular contribution of each ring')
     args = parser.parse_args(argv)
     bounds = [lambda n: min(F(1, n**2), F(11**18, n**20)),
               lambda n: F(2, 375*n**2)]
@@ -78,6 +80,9 @@ def main(argv=None):
     except (ValueError, ZeroDivisionError) as exc:
         parser.error(str(exc))
     print(f'Optimale Aufteilung: {counts}; Schranke: {value} ≈ {float(value):.8f}')
+    if args.details:
+        for i, (bound, count) in enumerate(zip(bounds, counts), 1):
+            print(f'Kreislinie {i}: {count} Punkte; Winkelschranke: {bound(count)}')
     if radial:
         print(f'Gesamtschranke (Winkel + Radius): {value + radial}')
     if args.target is not None or args.ring or radial or args.budget != 13:
