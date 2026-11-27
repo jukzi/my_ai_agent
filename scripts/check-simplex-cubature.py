@@ -44,10 +44,15 @@ def main(argv=None):
         parser.error(str(exc))
     worst = (Fraction(0), (0,) * (d + 1))
     degrees = (args.degree,) if args.homogeneous else range(args.degree + 1)
+    factorials = [factorial(k) for k in range(d + args.degree + 1)]
+    # Reuse the same coordinate powers across all barycentric monomials.
+    powers = [(row[-1], [tuple(x**k for k in range(args.degree + 1))
+                         for x in row[:-1]]) for row in rows]
     for degree in degrees:
         for ex in indices(d + 1, degree):
-            target = Fraction(factorial(d)*prod(map(factorial, ex)), factorial(d+degree))
-            estimate = sum(row[-1]*prod(x**k for x, k in zip(row[:-1], ex)) for row in rows)
+            target = Fraction(factorials[d]*prod(factorials[k] for k in ex), factorials[d+degree])
+            estimate = sum(weight*prod(axis[k] for axis, k in zip(axes, ex))
+                           for weight, axes in powers)
             worst = max(worst, (abs(estimate-target), ex))
     print(f'{len(rows)} Stützstellen; Gewichtssumme: {sum(row[-1] for row in rows)}')
     print(f'Größter absoluter Momentrest: {worst[0]}; Exponenten: {worst[1]}')
