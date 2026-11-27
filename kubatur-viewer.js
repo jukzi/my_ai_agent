@@ -1,6 +1,8 @@
 (() => {
   const polarPoint=(r,a)=>[.5+r*Math.cos(a),.5+r*Math.sin(a)];
   const cases = {
+    midpoint: {v:[[0,0],[1,0],[1,.25],[0,.25]], faces:[[0,1,2,3]], points:[[.5,.25]],
+      curve:Array.from({length:81},(_,i)=>[i/80,(i/80)**2])},
     gauss: {v:[[0,.5],[1,.5]], faces:[], interval:true, points:[-1,1].map(i=>[.5+i/(2*Math.sqrt(3)),.5])},
     disk: {v:[[0,0]], faces:[], rings:[.44], guides:[.44*2/3], points:[polarPoint(.44*2/3,Math.PI/5)], radiusLine:true},
     annulus: {v:[[0,0]], faces:[], rings:[.44,.44*.9], guides:[.915,.95,.985].map(r=>r*.44), pointSize:2.3,
@@ -49,6 +51,11 @@
       const depth=f=>f.reduce((s,i)=>s+v[i][2],0)/f.length;
       for(const f of [...scene.faces].sort((l,r)=>depth(l)-depth(r))){
         ctx.beginPath(); f.forEach((i,j)=>j?ctx.lineTo(...v[i].slice(0,2)):ctx.moveTo(...v[i].slice(0,2)));ctx.closePath();ctx.fillStyle='#5eead445';ctx.fill();ctx.strokeStyle='#327c81';ctx.lineWidth=2;ctx.stroke();
+      }
+      if(scene.curve){
+        const trace=points=>points.forEach((p,i)=>{const [x,y]=project(p);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);});
+        ctx.beginPath();trace(scene.curve);const [x,y]=project([1,0]);ctx.lineTo(x,y);ctx.closePath();ctx.fillStyle='#2563eb24';ctx.fill();
+        ctx.beginPath();trace(scene.curve);ctx.strokeStyle='#244ab5';ctx.lineWidth=3;ctx.stroke();
       }
       for(const p of scene.points){const [x,y]=project(p);ctx.beginPath();ctx.arc(x,y,scene.pointSize??7,0,2*Math.PI);ctx.fillStyle='#d65b28';ctx.fill();ctx.strokeStyle='white';ctx.stroke();}
     }
