@@ -1,6 +1,9 @@
 (() => {
   const polarPoint=(r,a)=>[.5+r*Math.cos(a),.5+r*Math.sin(a)];
+  const radicalInverse=(n,base)=>{let value=0, place=1/base;while(n){value+=(n%base)*place;n=Math.floor(n/base);place/=base;}return value;};
   const cases = {
+    halton: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]],pointSize:3.5,
+      points:Array.from({length:64},(_,i)=>[radicalInverse(i+1,2),radicalInverse(i+1,3)])},
     noise: {v:[[0,0],[1,0],[0,1]],faces:[],noise:true,
       curve:Array.from({length:64},(_,i)=>[i/63,1/Math.sqrt(i+1)]),
       points:[1,4,16,64].map(n=>[(n-1)/63,1/Math.sqrt(n)])},
