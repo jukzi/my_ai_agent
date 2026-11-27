@@ -9,6 +9,18 @@ allocate = runpy.run_path(str(Path(__file__).with_name('plan-angular-budget.py')
 
 
 class AllocationTest(unittest.TestCase):
+    def test_details_follow_selected_budget(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+
+        out = StringIO()
+        with redirect_stdout(out):
+            allocate.__globals__['main'](['--budget', '20', '--ring', '1:2',
+                                          '--ring', '1:4', '--target', '5/256', '--details'])
+        self.assertIn('Kleinstes Budget: 12', out.getvalue())
+        self.assertIn('Kreislinie 1: 8 Punkte; Winkelschranke: 1/64', out.getvalue())
+        self.assertIn('Kreislinie 2: 4 Punkte; Winkelschranke: 1/256', out.getvalue())
+
     def test_custom_cli(self):
         from contextlib import redirect_stdout, redirect_stderr
         from io import StringIO
