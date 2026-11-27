@@ -20,12 +20,16 @@ def main(argv=None):
     parser.add_argument('dimension', type=int, choices=(2, 3))
     parser.add_argument('degree', type=int)
     parser.add_argument('--tol', default='0', help='absolute residual tolerance (default: exact)')
+    parser.add_argument('--homogeneous', action='store_true',
+                        help='check only top-degree moments (exact mode only)')
     args = parser.parse_args(argv)
     d = args.dimension
     try:
         tol = Fraction(args.tol)
         if tol < 0 or args.degree < 0:
             raise ValueError('degree and tolerance must be nonnegative')
+        if args.homogeneous and tol:
+            raise ValueError('--homogeneous requires zero tolerance')
         rows = []
         for i, line in enumerate(args.table.read_text().splitlines(), 1):
             if not line.strip():
@@ -39,7 +43,8 @@ def main(argv=None):
     except (OSError, ValueError, ZeroDivisionError) as exc:
         parser.error(str(exc))
     worst = (Fraction(0), (0,) * (d + 1))
-    for degree in range(args.degree + 1):
+    degrees = (args.degree,) if args.homogeneous else range(args.degree + 1)
+    for degree in degrees:
         for ex in indices(d + 1, degree):
             target = Fraction(factorial(d)*prod(map(factorial, ex)), factorial(d+degree))
             estimate = sum(row[-1]*prod(x**k for x, k in zip(row[:-1], ex)) for row in rows)
