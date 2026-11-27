@@ -22,6 +22,20 @@ class AllocationTest(unittest.TestCase):
             main(['--ring', '1:0'])
         self.assertEqual(error.exception.code, 2)
 
+    def test_geometric_bound(self):
+        from contextlib import redirect_stdout, redirect_stderr
+        from io import StringIO
+
+        main = allocate.__globals__['main']
+        output = StringIO()
+        with redirect_stdout(output):
+            main(['--budget', '20', '--ring', '1:1', '2@1/2', '--target', '1/200'])
+        self.assertIn('Kleinstes Budget: 9', output.getvalue())
+        self.assertIn('Schranke: 2/511', output.getvalue())
+        with redirect_stderr(StringIO()), self.assertRaises(SystemExit) as error:
+            main(['--ring', '2@1'])
+        self.assertEqual(error.exception.code, 2)
+
     def test_target_cli(self):
         from contextlib import redirect_stdout
         from io import StringIO
