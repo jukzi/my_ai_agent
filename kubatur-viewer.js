@@ -7,7 +7,14 @@
     function next(){seed=(Math.imul(1664525,seed)+1013904223)>>>0;return seed/4294967296;}
     return Array.from({length:64},()=>[next(),next()]);
   }
+  const terrainVertices=Array.from({length:121},(_,i)=>{
+    const x=(i%11)/10,y=Math.floor(i/11)/10;
+    return [x,(x*x+y*y)/2,y];
+  });
   const cases = {
+    terrain: {v:terrainVertices,faces:Array.from({length:100},(_,i)=>{
+      const j=Math.floor(i/10)*11+i%10;return [j,j+1,j+12,j+11];
+    }),points:[.25,.75].flatMap(x=>[.25,.75].map(y=>[x,(x*x+y*y)/2,y]))},
     oneCell: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]],points:[[.5,.5]]},
     fourCells: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]], divisions:2,
       points:[.25,.75].flatMap(x=>[.25,.75].map(y=>[x,y]))},
