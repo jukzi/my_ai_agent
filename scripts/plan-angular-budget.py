@@ -66,6 +66,9 @@ def main(argv=None):
             target -= radial
             if value > target:
                 print('Keine Aufteilung erreicht die Zielschranke im Budget.')
+                print(f'Bestes Ergebnis bei {args.budget} Punkten: {counts}')
+                print(f'Kleinste Gesamtschranke: {value + radial}; '
+                      f'über dem Ziel um: {value - target}')
                 return 1
             lo, hi = len(bounds), args.budget
             # Each supplied bound is nonincreasing in the point count.
