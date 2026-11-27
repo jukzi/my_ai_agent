@@ -35,6 +35,12 @@ class SimplexCheckerTest(unittest.TestCase):
             self.check('1/2 1/2 1', 2, 0, '--cartesian')
         self.assertEqual(error.exception.code, 2)
 
+    def test_integral_weights(self):
+        with redirect_stdout(io.StringIO()):
+            for d, row in [(2, '1/3 1/3 1/2'), (3, '1/4 1/4 1/4 1/6')]:
+                self.assertEqual(self.check(row, d, 1, '--cartesian', '--integral-weights'), 0)
+                self.assertEqual(self.check(row, d, 1, '--cartesian'), 1)
+
     def test_triangle_exact_degree(self):
         table = '2/3 1/6 1/6 1/3\n1/6 2/3 1/6 1/3\n1/6 1/6 2/3 1/3\n'
         with redirect_stdout(io.StringIO()) as out:
