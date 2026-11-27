@@ -78,6 +78,12 @@
   cases.tetrahedronFaceOrbits={...cases.tetrahedron,
     points:[[.25,.25,.25],...[ [1,0,0,0],[1/3,1/3,1/3,0],[.5,.25,.25,0] ].flatMap(orbit4).map(point=>point.slice(0,3))],
     negativePoints:[5,6,7,8],pointSize:4};
+  const boundarySeeds=[[5,0,0,0],[4,1,0,0],[3,2,0,0],[3,1,1,0],[2,2,1,0]];
+  const boundaryGroups=boundarySeeds.map(seed=>orbit4(seed).map(point=>point.slice(0,3).map(k=>k/5)));
+  cases.tetrahedronBoundaryGrid={...cases.tetrahedron,pointSize:3,
+    points:[[.25,.25,.25],...boundaryGroups.flat()],
+    negativePoints:[1,4].flatMap(group=>boundaryGroups[group].map((_,i)=>
+      1+i+boundaryGroups.slice(0,group).reduce((n,points)=>n+points.length,0)))};
   cases.tetrahedronCentroid={...cases.tetrahedron,points:[[.25,.25,.25]]};
   cases.cubeFaces={...cases.cube,points:[0,1,2].flatMap(axis=>[0,1].map(side=>[.5,.5,.5].map((v,i)=>i===axis?side:v)))};
   for (const host of document.querySelectorAll('[data-kubatur-viewer]')) {
