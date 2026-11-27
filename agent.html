@@ -1976,6 +1976,36 @@
         }
       }
     }
+    function runZ3(smtlib) {
+      if (typeof smtlib !== 'string' || !smtlib.trim() || smtlib.length > 100000) throw new Error('SMT-LIB erwartet 1 bis 100.000 Zeichen.');
+      if (!crossOriginIsolated) throw new Error('Z3 benötigt eine cross-origin-isolierte Seite (COOP: same-origin und COEP: require-corp).');
+      const workerSource = async ({data}) => {
+        try {
+          const base = 'https://cdn.jsdelivr.net/npm/z3-solver@4.15.4/build/';
+          importScripts(base + 'z3-built.js');
+          const z3 = await initZ3({locateFile: file => base + file, mainScriptUrlOrBlob: base + 'z3-built.js'});
+          const config = z3._Z3_mk_config();
+          const ctx = z3._Z3_mk_context(config);
+          z3._Z3_del_config(config);
+          try {
+            z3._set_throwy_error_handler(ctx);
+            const output = z3.ccall('Z3_eval_smtlib2_string', 'string', ['number', 'string'], [ctx, data]);
+            postMessage({output: JSON.stringify({output: output.slice(0, 50000), truncated: output.length > 50000})});
+          } finally { z3._Z3_del_context(ctx); }
+        } catch (error) { postMessage({error: String(error).slice(0,500)}); }
+      };
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(new Blob([`self.onmessage = ${workerSource.toString()};`], {type:'text/javascript'}));
+        let worker;
+        try { worker = new Worker(url); } finally { URL.revokeObjectURL(url); }
+        const finish = () => { clearTimeout(timer); worker.terminate(); };
+        const timer = setTimeout(() => { finish(); reject(new Error('Z3: Zeitlimit erreicht.')); }, 15000);
+        worker.onmessage = ({data}) => { finish(); if (data.error) reject(new Error(data.error)); else resolve(data.output); };
+        worker.onerror = () => { finish(); reject(new Error('Z3-Worker konnte nicht ausgeführt werden.')); };
+        worker.postMessage(smtlib);
+      });
+    }
+
     function runProlog(program, query) {
       if (typeof program !== 'string' || program.length > 100000 || typeof query !== 'string' || !query.trim() || query.length > 10000) throw new Error('Ungültiges oder zu großes Prolog-Programm bzw. Ziel.');
       const workerSource = async ({data}) => {
@@ -2165,7 +2195,7 @@
         {id:'cfgGithubRepo', label:'Standard-Repository (owner/repo)', credential:false},
       ], check:{id:'btnCheckGithub', status:'githubCheckStatus', label:'GitHub-Token prüfen'}},
       Web: {tools:['WebFetch','JinaReader']},
-      Laufzeiten: {tools:['RunPython','RunJava','RunJavaScript','RunSQL','RunProlog','Bash']},
+      Laufzeiten: {tools:['RunPython','RunJava','RunJavaScript','RunSQL','RunProlog','RunZ3','Bash']},
       'Ausgabe und Organisation': {tools:['ShowImage','ShowHTML','ShowTable','MemoryRead','MemoryWrite','MemoryDelete','TodoWrite']},
     };
     const defaultGroupByTool = new Map(Object.entries(defaultToolGroups).flatMap(([group, definition]) => definition.tools.map(name => [name, group])));
@@ -3634,6 +3664,10 @@
             parameters: { type: 'object', properties: { sql: { type: 'string' } }, required: ['sql'] },
           },
         });
+        if (crossOriginIsolated) tools.push({type:'function', function:{
+          name:'RunZ3', description:'Löst Constraints lokal mit Z3. Übergib SMT-LIB 2 mit Deklarationen, assert und check-sat. Bei sat liefert get-model eine Belegung; bei unsat gibt es keine Lösung. Jeder Aufruf startet neu.',
+          parameters:{type:'object',properties:{smtlib:{type:'string'}},required:['smtlib']},
+        }});
         tools.push({type:'function', function:{
           name:'RunProlog', description:'Löst logische Aufgaben per Tau Prolog. Übergib Fakten und Regeln als program und ein Ziel mit abschließendem Punkt als query. Liefert bis zu 20 Variablenbelegungen. Jeder Aufruf startet neu.',
           parameters:{type:'object',properties:{program:{type:'string'},query:{type:'string'}},required:['program','query']},
@@ -3962,6 +3996,10 @@
       RunPython: async (args) => {
           if (!state.config.optionalTools.python) throw new Error('Python-Tool ist nicht aktiviert.');
           return await runPython(args.code, args.packages);
+      },
+      RunZ3: async ({smtlib}) => {
+        if (!state.config.optionalTools.javascript) throw new Error('JavaScript-Laufzeit ist nicht aktiviert.');
+        return await runZ3(smtlib);
       },
       RunProlog: async ({program, query}) => {
         if (!state.config.optionalTools.javascript) throw new Error('JavaScript-Laufzeit ist nicht aktiviert.');
