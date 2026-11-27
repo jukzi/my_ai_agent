@@ -39,6 +39,12 @@
   };
   // Two roots of t² - t/12 - 1/80 = 0.
   const shiftRoot=Math.sqrt((1/12)**2+1/20);
+  const triangleShiftRoot=Math.hypot(1/15,1/6);
+  cases.trianglePositiveCubic={...triangleOutline,
+    points:[1/15-triangleShiftRoot,1/15+triangleShiftRoot].flatMap(t=>{
+      const a=1/3+2*t,b=1/3-t;
+      return [[a,b],[b,a],[b,b]];
+    })};
   cases.triangleSigned={...triangleOutline,negativePoint:0,
     points:[[1/3,1/3],[3/5,1/5],[1/5,3/5],[1/5,1/5]]};
   cases.tetrahedronPositiveCubic={...cases.tetrahedron,
