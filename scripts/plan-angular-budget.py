@@ -1,4 +1,5 @@
 """Reproduce the angular allocation counterexample with exact fractions."""
+import argparse
 from fractions import Fraction as F
 
 
@@ -17,11 +18,32 @@ def optimal_allocation(bounds, budget):
     return best[budget]
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Minimize the sum of angular error bounds.')
+    parser.add_argument('--budget', type=int, default=13)
+    parser.add_argument('--ring', action='append', nargs='+', metavar='A:p',
+                        help='one ring; list alternatives A:p for min(A/n**p); A may be a fraction')
+    args = parser.parse_args(argv)
     bounds = [lambda n: min(F(1, n**2), F(11**18, n**20)),
               lambda n: F(2, 375*n**2)]
-    value, counts = optimal_allocation(bounds, 13)
+    try:
+        if args.ring:
+            bounds = []
+            for ring in args.ring:
+                terms = []
+                for spec in ring:
+                    a, p = spec.split(':')
+                    coefficient, exponent = F(a), int(p)
+                    if coefficient < 0 or exponent <= 0:
+                        raise ValueError('A must be nonnegative and p a positive integer')
+                    terms.append((coefficient, exponent))
+                bounds.append(lambda n, terms=terms: min(a / n**p for a, p in terms))
+        value, counts = optimal_allocation(bounds, args.budget)
+    except (ValueError, ZeroDivisionError) as exc:
+        parser.error(str(exc))
     print(f'Optimale Aufteilung: {counts}; Schranke: {value} ≈ {float(value):.8f}')
+    if args.ring or args.budget != 13:
+        return
     greedy = bounds[0](11) + bounds[1](2)
     print(f'Vergleich 11:2: {greedy} ≈ {float(greedy):.8f}')
 
