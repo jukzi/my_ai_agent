@@ -39,10 +39,17 @@ class SimplexCheckerTest(unittest.TestCase):
             self.assertEqual(self.check(table, 2, 2, '--symmetric', '--homogeneous'), 0)
             self.assertEqual(self.check(table, 2, 3, '--symmetric'), 1)
         for text, options in [(table.splitlines()[0], ()),
-                              (table, ('--tol', '1/100'))]:
+                              (table, ('--homogeneous', '--tol', '1/100'))]:
             with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
                 self.check(text, 2, 2, '--symmetric', *options)
             self.assertEqual(error.exception.code, 2)
+
+    def test_rounded_symmetric_rule(self):
+        table = '0.666 0.167 0.167 0.333\n0.167 0.666 0.167 0.333\n0.167 0.167 0.666 0.333\n'
+        with redirect_stdout(io.StringIO()):
+            for tol, status in [('1/1000', 0), ('1/2000', 1)]:
+                self.assertEqual(self.check(table, 2, 2, '--tol', tol), status)
+                self.assertEqual(self.check(table, 2, 2, '--tol', tol, '--symmetric'), status)
 
     def test_tetrahedron_centroid(self):
         with redirect_stdout(io.StringIO()):
