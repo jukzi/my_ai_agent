@@ -23,6 +23,16 @@ class SimplexCheckerTest(unittest.TestCase):
             self.assertEqual(self.check(table, 2, 3), 1)
         self.assertIn('Momentrest: 1/540', out.getvalue())
 
+    def test_homogeneous_mode(self):
+        table = '2/3 1/6 1/6 1/3\n1/6 2/3 1/6 1/3\n1/6 1/6 2/3 1/3\n'
+        with redirect_stdout(io.StringIO()):
+            for degree in (0, 1, 2, 3):
+                self.assertEqual(self.check(table, 2, degree, '--homogeneous'),
+                                 self.check(table, 2, degree))
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            self.check(table, 2, 2, '--homogeneous', '--tol', '1/100')
+        self.assertEqual(error.exception.code, 2)
+
     def test_tetrahedron_centroid(self):
         with redirect_stdout(io.StringIO()):
             self.assertEqual(self.check('1/4 1/4 1/4 1/4 1\n', 3, 1), 0)
