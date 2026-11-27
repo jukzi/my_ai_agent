@@ -37,6 +37,8 @@
     triangle: {v:[[0,0],[1,0],[0,1]], faces:[[0,1,2]], points:[[1/6,1/6],[2/3,1/6],[1/6,2/3]]},
     tetrahedron: {v:[[0,0,0],[1,0,0],[0,1,0],[0,0,1]], faces:[[0,1,2],[0,1,3],[0,2,3],[1,2,3]], points:Array.from({length:4},(_,i)=>Array.from({length:3},(_,j)=>1/4+(i===j?3:-1)/(4*Math.sqrt(5))))}
   };
+  cases.tetrahedronSigned={...cases.tetrahedron,negativePoint:0,points:[[.25,.25,.25],
+    ...Array.from({length:4},(_,i)=>Array.from({length:3},(_,j)=>i===j?1/2:1/6))]};
   cases.tetrahedronCentroid={...cases.tetrahedron,points:[[.25,.25,.25]]};
   cases.cubeFaces={...cases.cube,points:[0,1,2].flatMap(axis=>[0,1].map(side=>[.5,.5,.5].map((v,i)=>i===axis?side:v)))};
   for (const host of document.querySelectorAll('[data-kubatur-viewer]')) {
@@ -106,7 +108,7 @@
         ctx.beginPath();trace(scene.curve);const [x,y]=project([1,0]);ctx.lineTo(x,y);ctx.closePath();ctx.fillStyle='#2563eb24';if(!scene.noise)ctx.fill();
         ctx.beginPath();trace(scene.curve);ctx.strokeStyle='#244ab5';ctx.lineWidth=3;ctx.stroke();
       }
-      for(const p of scene.points){const [x,y]=project(p);ctx.beginPath();ctx.arc(x,y,scene.pointSize??7,0,2*Math.PI);ctx.fillStyle='#d65b28';ctx.fill();ctx.strokeStyle='white';ctx.stroke();}
+      for(const [i,p] of scene.points.entries()){const [x,y]=project(p);ctx.beginPath();ctx.arc(x,y,scene.pointSize??7,0,2*Math.PI);ctx.fillStyle=i===scene.negativePoint?'#6941a5':'#d65b28';ctx.fill();ctx.strokeStyle='white';ctx.stroke();}
     }
     function magnify(f){zoom=Math.max(.3,Math.min(8,zoom*f));draw();}
     function button(label,icon,fn){const btn=document.createElement('button');btn.type='button';appearance(btn,label,icon);btn.addEventListener('click',fn);controls.append(btn);return btn;}
