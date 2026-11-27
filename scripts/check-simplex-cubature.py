@@ -26,6 +26,8 @@ def main(argv=None):
                         help='check only top-degree moments (exact mode only)')
     parser.add_argument('--symmetric', action='store_true',
                         help='verify exact permutation symmetry and check one moment per orbit')
+    parser.add_argument('--cartesian', action='store_true',
+                        help='read d reference-simplex coordinates and append the missing barycentric coordinate')
     args = parser.parse_args(argv)
     d = args.dimension
     try:
@@ -39,6 +41,11 @@ def main(argv=None):
             if not line.strip():
                 continue
             row = tuple(map(Fraction, line.split()))
+            if args.cartesian:
+                if len(row) != d + 1:
+                    raise ValueError(f'line {i}: expected {d} Cartesian coordinates and a weight')
+                coords, weight = row[:-1], row[-1]
+                row = (*coords, 1 - sum(coords), weight)
             if len(row) != d + 2 or min(row) <= 0 or abs(sum(row[:-1])-1) > tol:
                 raise ValueError(f'line {i}: expected positive barycentric coordinates summing to one and a positive weight')
             rows.append(row)
