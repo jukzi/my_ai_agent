@@ -53,6 +53,13 @@ class AllocationTest(unittest.TestCase):
                                    for counts in options)
                     self.assertEqual(allocate(bounds, budget), expected)
 
+    def test_table_covers_every_feasible_budget(self):
+        table = allocate.__globals__['allocation_table']
+        bounds = [lambda n: F(1, n**2), lambda n: F(2, n**4)]
+        expected = {b: min((bounds[0](n) + bounds[1](b-n), (n, b-n))
+                           for n in range(1, b)) for b in range(2, 16)}
+        self.assertEqual(table(bounds, 15), expected)
+
     def test_invalid_budget(self):
         with self.assertRaises(ValueError):
             allocate([lambda n: F(1, n)] * 2, 1)
