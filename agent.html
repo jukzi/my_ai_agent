@@ -2168,7 +2168,7 @@
       return makeRuntime(stateForChat, chat);
     }
     const defaultToolGroups = {
-      GitHub: {tools:['GitHub_DownloadArtifact','GitHub_ReadFile','GitHub_GetJobLogs','GitHub_ListPRFiles','GitHub_CreateBranch','GitHub_CommitFile','GitHub_CreatePR'], fields:[
+      GitHub: {tools:['GitHub_DownloadArtifact','GitHub_ReadFile','GitHub_GetJobLogs','GitHub_ListPRFiles','GitHub_CreateBranch','GitHub_CommitFile','GitHub_CommitFiles','GitHub_CreatePR'], fields:[
         {id:'cfgGithubToken', label:'Personal Access Token', credential:true},
         {id:'cfgGithubRepo', label:'Standard-Repository (owner/repo)', credential:false},
       ], check:{id:'btnCheckGithub', status:'githubCheckStatus', label:'GitHub-Token prüfen'}},
@@ -3299,6 +3299,44 @@
         });
         return { branch: newBranch, base, sha: created.object.sha };
       },
+      async commitFiles({repo, branch, expected_head, message, files}) {
+        if (!/^[a-f0-9]{40}$/.test(expected_head || '') || !branch || !message?.trim() || !Array.isArray(files) || !files.length || files.length > 100) throw new Error('Branch, erwarteter HEAD, Nachricht und 1–100 Dateien erforderlich.');
+        const paths = new Set();
+        const tree = files.map(({path, content, workspace_path}) => {
+          const target = normalizePath(path);
+          if (!target || paths.has(target)) throw new Error(`Ungültiger oder doppelter Pfad: ${path}`);
+          paths.add(target);
+          if (workspace_path !== undefined) {
+            if (content !== undefined) throw new Error('content oder workspace_path angeben, nicht beides.');
+            const file = VFS.get(workspace_path);
+            if (!file || file.isBinary) throw new Error(`Workspace-Textdatei nicht verfügbar: ${workspace_path}`);
+            content = file.content;
+          }
+          if (typeof content !== 'string') throw new Error(`Textinhalt fehlt: ${target}`);
+          return {path:target, type:'blob', mode:'100644', content};
+        });
+        const root = `/repos/${this.resolveRepo(repo)}/git`;
+        const ref = branch.split('/').map(encodeURIComponent).join('/');
+        const verify = async () => {
+          const head = await this.request(`${root}/ref/heads/${ref}`, 'GET', null, false, 'no-store');
+          if (head.object?.sha !== expected_head) throw new Error('Branchstand geändert; kein Branch-Update ausgeführt.');
+        };
+        await verify();
+        const parent = await this.request(`${root}/commits/${expected_head}`);
+        const base = await this.request(`${root}/trees/${parent.tree.sha}?recursive=1`);
+        if (base.truncated) throw new Error('Basisbaum unvollständig.');
+        const existing = new Map(base.tree.map(entry => [entry.path, entry]));
+        for (const entry of tree) {
+          const previous = existing.get(entry.path);
+          if (previous && !['100644','100755'].includes(previous.mode)) throw new Error(`Keine reguläre Datei: ${entry.path}`);
+          if (previous) entry.mode = previous.mode;
+        }
+        const next = await this.request(`${root}/trees`, 'POST', {base_tree:parent.tree.sha, tree});
+        const commit = await this.request(`${root}/commits`, 'POST', {message, tree:next.sha, parents:[expected_head]});
+        await verify();
+        await this.request(`${root}/refs/heads/${ref}`, 'PATCH', {sha:commit.sha, force:false});
+        return {branch, commit_sha:commit.sha, files:tree.length};
+      },
       async commitFile(repo, branch, path, content, message, fromWorkspacePath) {
         const r = this.resolveRepo(repo);
         const normPath = normalizePath(path);
@@ -3760,6 +3798,16 @@
             },
           },
           {
+            type: 'function', function: {
+              name: 'GitHub_CommitFiles',
+              description: 'Schreibt mehrere Textdateien in einen Commit, ohne Force-Push.',
+              parameters: {type:'object', required:['branch','expected_head','message','files'], properties:{
+                repo:{type:'string'}, branch:{type:'string'}, expected_head:{type:'string'}, message:{type:'string'},
+                files:{type:'array', items:{type:'object', required:['path'], properties:{path:{type:'string'}, content:{type:'string'}, workspace_path:{type:'string'}}}},
+              }},
+            },
+          },
+          {
             type: 'function',
             function: {
               name: 'GitHub_CreatePR',
@@ -4053,6 +4101,10 @@
       GitHub_CommitFile: async (args) => {
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
           return JSON.stringify(await GitHub.commitFile(args.repo, args.branch, args.path, args.content, args.message, args.workspace_path), null, 2);
+      },
+      GitHub_CommitFiles: async (args) => {
+        if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
+        return JSON.stringify(await GitHub.commitFiles(args), null, 2);
       },
       GitHub_CreatePR: async (args) => {
           if (!state.config.optionalTools.github) throw new Error('GitHub-Tool ist nicht aktiviert.');
