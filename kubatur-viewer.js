@@ -1,6 +1,7 @@
 (() => {
   const polarPoint=(r,a)=>[.5+r*Math.cos(a),.5+r*Math.sin(a)];
   const cases = {
+    gauss: {v:[[0,.5],[1,.5]], faces:[], interval:true, points:[-1,1].map(i=>[.5+i/(2*Math.sqrt(3)),.5])},
     disk: {v:[[0,0]], faces:[], rings:[.44], guides:[.44*2/3], points:[polarPoint(.44*2/3,Math.PI/5)], radiusLine:true},
     annulus: {v:[[0,0]], faces:[], rings:[.44,.44*.9], guides:[.915,.95,.985].map(r=>r*.44), pointSize:2.3,
       points:[.915,.95,.985].flatMap((r,j)=>Array.from({length:8},(_,i)=>polarPoint(.44*r,(i+j/3)*Math.PI/4)))},
@@ -37,6 +38,14 @@
         if(scene.radiusLine){const [x,y]=project(scene.points[0]);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.stroke();}
       }
       const v=scene.v.map(project);
+      if(scene.interval){
+        const [left,right]=v;
+        ctx.strokeStyle='#327c81';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(left[0],left[1]);ctx.lineTo(right[0],right[1]);
+        for(const [x,y] of v){ctx.moveTo(x,y-8);ctx.lineTo(x,y+8);}ctx.stroke();
+        ctx.font='15px system-ui';ctx.textAlign='center';ctx.fillStyle='#153743';
+        v.forEach(([x,y],i)=>ctx.fillText(String(i),x,y+29));
+        scene.points.forEach((p,i)=>{const [x,y]=project(p);ctx.fillText(i?'½ + 1/(2√3)':'½ − 1/(2√3)',x,y-17);});
+      }
       const depth=f=>f.reduce((s,i)=>s+v[i][2],0)/f.length;
       for(const f of [...scene.faces].sort((l,r)=>depth(l)-depth(r))){
         ctx.beginPath(); f.forEach((i,j)=>j?ctx.lineTo(...v[i].slice(0,2)):ctx.moveTo(...v[i].slice(0,2)));ctx.closePath();ctx.fillStyle='#5eead445';ctx.fill();ctx.strokeStyle='#327c81';ctx.lineWidth=2;ctx.stroke();
