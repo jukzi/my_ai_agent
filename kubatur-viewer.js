@@ -118,7 +118,13 @@
       const Y=y*Math.cos(b)-Z*Math.sin(b);
       return [320+dx+220*zoom*X,210+dy-220*zoom*Y,y*Math.sin(b)+Z*Math.cos(b)];
     }
+    let framePending=false;
     function draw(){
+      if(framePending)return;
+      framePending=true;
+      requestAnimationFrame(()=>{framePending=false;paint();});
+    }
+    function paint(){
       ctx.clearRect(0,0,640,420);
       if(scene.rings){
         const [cx,cy]=project([.5,.5]);
