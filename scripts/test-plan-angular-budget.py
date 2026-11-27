@@ -34,6 +34,19 @@ class AllocationTest(unittest.TestCase):
         self.assertIn('Kleinstes Budget: 4', output.getvalue())
         self.assertIn('Keine Aufteilung', output.getvalue())
 
+    def test_radial_bound_counts_toward_target(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+
+        main = allocate.__globals__['main']
+        args = ['--budget', '10', '--ring', '1:2', '--radial-bound', '1/16']
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertIsNone(main(args + ['--target', '1/8']))
+            self.assertEqual(main(args + ['--target', '1/16']), 1)
+        self.assertIn('Kleinstes Budget: 4', output.getvalue())
+        self.assertIn('Gesamtschranke (Winkel + Radius): 1/8', output.getvalue())
+
     def test_switch_between_bounds(self):
         bounds = [lambda n: min(F(1, n**2), F(11**18, n**20)),
                   lambda n: F(2, 375*n**2)]
