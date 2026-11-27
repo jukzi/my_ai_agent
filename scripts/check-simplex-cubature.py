@@ -25,7 +25,7 @@ def main(argv=None):
     parser.add_argument('--homogeneous', action='store_true',
                         help='check only top-degree moments (exact mode only)')
     parser.add_argument('--symmetric', action='store_true',
-                        help='verify permutation symmetry and check one moment per orbit (exact mode only)')
+                        help='verify exact permutation symmetry and check one moment per orbit')
     args = parser.parse_args(argv)
     d = args.dimension
     try:
@@ -34,8 +34,6 @@ def main(argv=None):
             raise ValueError('degree and tolerance must be nonnegative')
         if args.homogeneous and tol:
             raise ValueError('--homogeneous requires zero tolerance')
-        if args.symmetric and tol:
-            raise ValueError('--symmetric requires zero tolerance')
         rows = []
         for i, line in enumerate(args.table.read_text().splitlines(), 1):
             if not line.strip():
