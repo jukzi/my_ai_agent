@@ -1,6 +1,9 @@
 (() => {
   const polarPoint=(r,a)=>[.5+r*Math.cos(a),.5+r*Math.sin(a)];
   const cases = {
+    noise: {v:[[0,0],[1,0],[0,1]],faces:[],noise:true,
+      curve:Array.from({length:64},(_,i)=>[i/63,1/Math.sqrt(i+1)]),
+      points:[1,4,16,64].map(n=>[(n-1)/63,1/Math.sqrt(n)])},
     midpoint: {v:[[0,0],[1,0],[1,.25],[0,.25]], faces:[[0,1,2,3]], points:[[.5,.25]],
       curve:Array.from({length:81},(_,i)=>[i/80,(i/80)**2])},
     gauss: {v:[[0,.5],[1,.5]], faces:[], interval:true, points:[-1,1].map(i=>[.5+i/(2*Math.sqrt(3)),.5])},
@@ -52,9 +55,16 @@
       for(const f of [...scene.faces].sort((l,r)=>depth(l)-depth(r))){
         ctx.beginPath(); f.forEach((i,j)=>j?ctx.lineTo(...v[i].slice(0,2)):ctx.moveTo(...v[i].slice(0,2)));ctx.closePath();ctx.fillStyle='#5eead445';ctx.fill();ctx.strokeStyle='#327c81';ctx.lineWidth=2;ctx.stroke();
       }
+      if(scene.noise){
+        const [origin,right,top]=v;
+        ctx.beginPath();ctx.moveTo(...right.slice(0,2));ctx.lineTo(...origin.slice(0,2));ctx.lineTo(...top.slice(0,2));ctx.strokeStyle='#327c81';ctx.lineWidth=2;ctx.stroke();
+        ctx.font='15px system-ui';ctx.fillStyle='#153743';ctx.textAlign='center';
+        for(const n of [1,16,64]){const [x,y]=project([(n-1)/63,0]);ctx.fillText(String(n),x,y+20);}
+        ctx.fillText('Messungen',right[0]+48,right[1]+20);ctx.fillText('Relative Streuung',top[0]+58,top[1]-15);
+      }
       if(scene.curve){
         const trace=points=>points.forEach((p,i)=>{const [x,y]=project(p);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);});
-        ctx.beginPath();trace(scene.curve);const [x,y]=project([1,0]);ctx.lineTo(x,y);ctx.closePath();ctx.fillStyle='#2563eb24';ctx.fill();
+        ctx.beginPath();trace(scene.curve);const [x,y]=project([1,0]);ctx.lineTo(x,y);ctx.closePath();ctx.fillStyle='#2563eb24';if(!scene.noise)ctx.fill();
         ctx.beginPath();trace(scene.curve);ctx.strokeStyle='#244ab5';ctx.lineWidth=3;ctx.stroke();
       }
       for(const p of scene.points){const [x,y]=project(p);ctx.beginPath();ctx.arc(x,y,scene.pointSize??7,0,2*Math.PI);ctx.fillStyle='#d65b28';ctx.fill();ctx.strokeStyle='white';ctx.stroke();}
