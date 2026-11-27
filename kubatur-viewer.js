@@ -45,6 +45,8 @@
       const a=1/3+2*t,b=1/3-t;
       return [[a,b],[b,a],[b,b]];
     })};
+  cases.triangleBoundaryCubic={...triangleOutline,
+    points:[...triangleOutline.v,...cases.triangleEdges.points,[1/3,1/3]]};
   cases.triangleSigned={...triangleOutline,negativePoint:0,
     points:[[1/3,1/3],[3/5,1/5],[1/5,3/5],[1/5,1/5]]};
   cases.tetrahedronPositiveCubic={...cases.tetrahedron,
