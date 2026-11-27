@@ -64,6 +64,12 @@
   cases.tetrahedronQuadraticGrid={...cases.tetrahedron,
     points:[...cases.tetrahedron.v,...cases.tetrahedron.v.flatMap((a,i)=>
       cases.tetrahedron.v.slice(i+1).map(b=>a.map((x,k)=>(x+b[k])/2)))]};
+  const keastOffset=Math.sqrt(5/224);
+  cases.tetrahedronQuartic={...cases.tetrahedron,negativePoint:0,
+    points:[[.25,.25,.25],
+      ...Array.from({length:4},(_,i)=>Array.from({length:3},(_,j)=>i===j?11/14:1/14)),
+      ...[0,1,2,3].flatMap(i=>[0,1,2,3].filter(j=>j>i).map(j=>
+        [0,1,2].map(k=>.25+(k===i||k===j?keastOffset:-keastOffset))))]};
   cases.tetrahedronCentroid={...cases.tetrahedron,points:[[.25,.25,.25]]};
   cases.cubeFaces={...cases.cube,points:[0,1,2].flatMap(axis=>[0,1].map(side=>[.5,.5,.5].map((v,i)=>i===axis?side:v)))};
   for (const host of document.querySelectorAll('[data-kubatur-viewer]')) {
