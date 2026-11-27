@@ -1,8 +1,0 @@
-[build]
-  command = "mkdir -p dist && cp agent.html dist/agent.html && python3 scripts/stage-scipy-mirror.py dist"
-  publish = "dist"
-
-[[redirects]]
-  from = "/"
-  to = "/agent.html"
-  status = 200
