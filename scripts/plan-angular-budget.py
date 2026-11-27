@@ -25,8 +25,8 @@ def optimal_allocation(bounds, budget):
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Minimize the sum of angular error bounds.')
     parser.add_argument('--budget', type=int, default=13)
-    parser.add_argument('--ring', action='append', nargs='+', metavar='A:p',
-                        help='one ring; list alternatives A:p for min(A/n**p); A may be a fraction')
+    parser.add_argument('--ring', action='append', nargs='+', metavar='BOUND',
+                        help='one ring; alternatives A:p for A/n**p or C@r for C*r**n/(1-r**n)')
     parser.add_argument('--target', metavar='EPS',
                         help='find the smallest budget up to --budget with bound <= EPS')
     parser.add_argument('--radial-bound', default='0',
@@ -40,12 +40,18 @@ def main(argv=None):
             for ring in args.ring:
                 terms = []
                 for spec in ring:
+                    if '@' in spec:
+                        c, r = map(F, spec.split('@'))
+                        if c < 0 or not 0 < r < 1:
+                            raise ValueError('C must be nonnegative and 0 < r < 1')
+                        terms.append(lambda n, c=c, r=r: c*r**n / (1-r**n))
+                        continue
                     a, p = spec.split(':')
                     coefficient, exponent = F(a), int(p)
                     if coefficient < 0 or exponent <= 0:
                         raise ValueError('A must be nonnegative and p a positive integer')
-                    terms.append((coefficient, exponent))
-                bounds.append(lambda n, terms=terms: min(a / n**p for a, p in terms))
+                    terms.append(lambda n, a=coefficient, p=exponent: a / n**p)
+                bounds.append(lambda n, terms=terms: min(term(n) for term in terms))
         radial = F(args.radial_bound)
         if radial < 0:
             raise ValueError('radial bound must be nonnegative')
