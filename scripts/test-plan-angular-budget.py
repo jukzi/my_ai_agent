@@ -1,0 +1,37 @@
+"""Verify angular budget allocation against exhaustive search."""
+import runpy
+import unittest
+from fractions import Fraction as F
+from itertools import combinations
+from pathlib import Path
+
+allocate = runpy.run_path(str(Path(__file__).with_name('plan-angular-budget.py')))['optimal_allocation']
+
+
+class AllocationTest(unittest.TestCase):
+    def test_switch_between_bounds(self):
+        bounds = [lambda n: min(F(1, n**2), F(11**18, n**20)),
+                  lambda n: F(2, 375*n**2)]
+        self.assertEqual(allocate(bounds, 13),
+                         (bounds[0](12) + bounds[1](1), (12, 1)))
+
+    def test_against_exhaustive_search(self):
+        all_bounds = [lambda n: F(1, n**2), lambda n: F(2, n**4),
+                      lambda n: min(F(1, n**2), F(11**18, n**20))]
+        for rings in range(1, 4):
+            bounds = all_bounds[:rings]
+            for budget in range(rings, 16):
+                with self.subTest(rings=rings, budget=budget):
+                    options = (tuple(y-x for x, y in zip((0, *cuts), (*cuts, budget)))
+                               for cuts in combinations(range(1, budget), rings-1))
+                    expected = min((sum(f(n) for f, n in zip(bounds, counts)), counts)
+                                   for counts in options)
+                    self.assertEqual(allocate(bounds, budget), expected)
+
+    def test_invalid_budget(self):
+        with self.assertRaises(ValueError):
+            allocate([lambda n: F(1, n)] * 2, 1)
+
+
+if __name__ == '__main__':
+    unittest.main()
