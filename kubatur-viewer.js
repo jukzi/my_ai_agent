@@ -192,12 +192,20 @@
         }
       }
     }
-    function magnify(f){zoom=Math.max(.3,Math.min(8,zoom*f));draw();}
+    function magnify(f,x=320,y=210){
+      const next=Math.max(.3,Math.min(8,zoom*f)), ratio=next/zoom;
+      dx+=(x-320-dx)*(1-ratio);dy+=(y-210-dy)*(1-ratio);
+      zoom=next;draw();
+    }
+    function canvasPosition(x,y){
+      const rect=canvas.getBoundingClientRect();
+      return [(x-rect.left)*640/rect.width,(y-rect.top)*420/rect.height];
+    }
     function button(label,icon,fn){const btn=document.createElement('button');btn.type='button';appearance(btn,label,icon);btn.addEventListener('click',fn);controls.append(btn);return btn;}
     button('Vergrößern','plus',()=>magnify(1.2));button('Verkleinern','minus',()=>magnify(1/1.2));button('Zurücksetzen','reset',reset);
     if(spatial){button('Links drehen','left',()=>{a-=.2;draw();});button('Rechts drehen','right',()=>{a+=.2;draw();});}
     if(host.requestFullscreen){const btn=button('Vollbild','full',async()=>{try{if(document.fullscreenElement===host)await document.exitFullscreen();else await host.requestFullscreen();}catch{appearance(btn,'Vollbild nicht verfügbar','full');}});document.addEventListener('fullscreenchange',()=>{const active=document.fullscreenElement===host;appearance(btn,active?'Vollbild verlassen':'Vollbild',active?'exit':'full');});}
-    canvas.addEventListener('wheel',e=>{if(document.activeElement!==canvas)return;e.preventDefault();magnify(Math.exp(-Math.sign(e.deltaY)*.12));},{passive:false});
+    canvas.addEventListener('wheel',e=>{if(document.activeElement!==canvas)return;e.preventDefault();magnify(Math.exp(-Math.sign(e.deltaY)*.12),...canvasPosition(e.clientX,e.clientY));},{passive:false});
     canvas.addEventListener('keydown',e=>{const moves={ArrowLeft:[-15,0],ArrowRight:[15,0],ArrowUp:[0,-15],ArrowDown:[0,15]};if(moves[e.key]){const [x,y]=moves[e.key];dx+=x;dy+=y;draw();}else if(e.key==='+'||e.key==='=')magnify(1.2);else if(e.key==='-')magnify(1/1.2);else return;e.preventDefault();});
     if(scene.grid){
       const counts=Array(16).fill(0);
@@ -215,7 +223,7 @@
       if(!pointers.has(e.pointerId))return;
       const old=[...pointers.values()];pointers.set(e.pointerId,[e.clientX,e.clientY]);const next=[...pointers.values()];
       const scale=640/canvas.getBoundingClientRect().width;
-      if(next.length===2){const dist=p=>Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1]);const mid=(p,j)=>(p[0][j]+p[1][j])/2;dx+=(mid(next,0)-mid(old,0))*scale;dy+=(mid(next,1)-mid(old,1))*scale;if(dist(old)>0)magnify(dist(next)/dist(old));}
+      if(next.length===2){const dist=p=>Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1]);const mid=(p,j)=>(p[0][j]+p[1][j])/2;dx+=(mid(next,0)-mid(old,0))*scale;dy+=(mid(next,1)-mid(old,1))*scale;if(dist(old)>0)magnify(dist(next)/dist(old),...canvasPosition(mid(next,0),mid(next,1)));}
       else if(next.length===1){const x=(next[0][0]-old[0][0])*scale,y=(next[0][1]-old[0][1])*scale;if(spatial&&!e.shiftKey){a+=x/150;b+=y/150;}else{dx+=x;dy+=y;}}
       draw();
     });
