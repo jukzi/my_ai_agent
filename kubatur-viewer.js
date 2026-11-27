@@ -38,6 +38,10 @@
   for (const host of document.querySelectorAll('[data-kubatur-viewer]')) {
     const scene=cases[host.dataset.kubaturViewer]; if(!scene) continue;
     const spatial=scene.v[0].length===3;
+    const center=spatial ? [0,1,2].map(axis=>{
+      const values=scene.v.map(vertex=>vertex[axis]);
+      return (Math.min(...values)+Math.max(...values))/2;
+    }) : [.5,.5,0];
     const canvas=document.createElement('canvas'); canvas.width=640; canvas.height=420; canvas.tabIndex=0;
     canvas.setAttribute('aria-label','Interaktive Abbildung: Pfeiltasten zum Verschieben, Plus und Minus zum Zoomen');
     const ctx=canvas.getContext('2d'); if(!ctx) continue;
@@ -48,7 +52,7 @@
     let zoom,dx,dy,a,b;
     function reset(){zoom=1;dx=dy=0;a=spatial?0.65:0;b=spatial?0.5:0;draw();}
     function project([x,y,z=0]){
-      x-=spatial?.25:.5;y-=spatial?.25:.5;if(spatial)z-=.25;
+      x-=center[0];y-=center[1];z-=center[2];
       const X=x*Math.cos(a)-z*Math.sin(a), Z=x*Math.sin(a)+z*Math.cos(a);
       const Y=y*Math.cos(b)-Z*Math.sin(b);
       return [320+dx+220*zoom*X,210+dy-220*zoom*Y,y*Math.sin(b)+Z*Math.cos(b)];
