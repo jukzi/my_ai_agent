@@ -52,6 +52,9 @@
       Array.from({length:4},(_,i)=>Array.from({length:3},(_,j)=>1/4+(i===j?3:-1)*t)))};
   cases.tetrahedronSigned={...cases.tetrahedron,negativePoint:0,points:[[.25,.25,.25],
     ...Array.from({length:4},(_,i)=>Array.from({length:3},(_,j)=>i===j?1/2:1/6))]};
+  cases.tetrahedronQuadraticGrid={...cases.tetrahedron,
+    points:[...cases.tetrahedron.v,...cases.tetrahedron.v.flatMap((a,i)=>
+      cases.tetrahedron.v.slice(i+1).map(b=>a.map((x,k)=>(x+b[k])/2)))]};
   cases.tetrahedronCentroid={...cases.tetrahedron,points:[[.25,.25,.25]]};
   cases.cubeFaces={...cases.cube,points:[0,1,2].flatMap(axis=>[0,1].map(side=>[.5,.5,.5].map((v,i)=>i===axis?side:v)))};
   for (const host of document.querySelectorAll('[data-kubatur-viewer]')) {
