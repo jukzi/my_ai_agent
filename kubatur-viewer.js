@@ -8,8 +8,8 @@
     return Array.from({length:64},()=>[next(),next()]);
   }
   const cases = {
-    randomSquare: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]],pointSize:3.5,points:randomExample()},
-    halton: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]],pointSize:3.5,
+    randomSquare: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]],pointSize:3.5, grid:true,points:randomExample()},
+    halton: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]],pointSize:3.5, grid:true,
       points:Array.from({length:64},(_,i)=>[radicalInverse(i+1,2),radicalInverse(i+1,3)])},
     noise: {v:[[0,0],[1,0],[0,1]],faces:[],noise:true,
       curve:Array.from({length:64},(_,i)=>[i/63,1/Math.sqrt(i+1)]),
@@ -72,6 +72,16 @@
         for(const n of [1,16,64]){const [x,y]=project([(n-1)/63,0]);ctx.fillText(String(n),x,y+20);}
         ctx.fillText('Messungen',right[0]+48,right[1]+20);ctx.fillText('Relative Streuung',top[0]+58,top[1]-15);
       }
+      if(scene.grid){
+        ctx.save();ctx.setLineDash([3,4]);ctx.strokeStyle='#327c81';ctx.lineWidth=1;ctx.beginPath();
+        for(let i=1;i<4;i++){
+          const a=i/4;
+          for(const [start,end] of [[[a,0],[a,1]],[[0,a],[1,a]]]){
+            ctx.moveTo(...project(start).slice(0,2));ctx.lineTo(...project(end).slice(0,2));
+          }
+        }
+        ctx.stroke();ctx.restore();
+      }
       if(scene.curve){
         const trace=points=>points.forEach((p,i)=>{const [x,y]=project(p);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);});
         ctx.beginPath();trace(scene.curve);const [x,y]=project([1,0]);ctx.lineTo(x,y);ctx.closePath();ctx.fillStyle='#2563eb24';if(!scene.noise)ctx.fill();
@@ -86,6 +96,16 @@
     if(host.requestFullscreen){const btn=button('Vollbild','full',async()=>{try{if(document.fullscreenElement===host)await document.exitFullscreen();else await host.requestFullscreen();}catch{appearance(btn,'Vollbild nicht verfügbar','full');}});document.addEventListener('fullscreenchange',()=>{const active=document.fullscreenElement===host;appearance(btn,active?'Vollbild verlassen':'Vollbild',active?'exit':'full');});}
     canvas.addEventListener('wheel',e=>{if(document.activeElement!==canvas)return;e.preventDefault();magnify(Math.exp(-Math.sign(e.deltaY)*.12));},{passive:false});
     canvas.addEventListener('keydown',e=>{const moves={ArrowLeft:[-15,0],ArrowRight:[15,0],ArrowUp:[0,-15],ArrowDown:[0,15]};if(moves[e.key]){const [x,y]=moves[e.key];dx+=x;dy+=y;draw();}else if(e.key==='+'||e.key==='=')magnify(1.2);else if(e.key==='-')magnify(1/1.2);else return;e.preventDefault();});
+    if(scene.grid){
+      const counts=Array(16).fill(0);
+      for(const [x,y] of scene.points) counts[4*Math.floor(4*y)+Math.floor(4*x)]++;
+      const panel=document.createElement('details');panel.className='viewer-counts';
+      const summary=document.createElement('summary');summary.textContent='Punkte je Rasterfeld';panel.append(summary);
+      const table=document.createElement('table');
+      const caption=table.createCaption();caption.textContent='Anzahl pro Feld, von oben links gelesen';
+      for(let row=3;row>=0;row--){const tr=table.insertRow();for(let col=0;col<4;col++)tr.insertCell().textContent=counts[4*row+col];}
+      panel.append(table);host.after(panel);
+    }
     const pointers=new Map();
     canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;canvas.setPointerCapture(e.pointerId);canvas.focus({preventScroll:true});pointers.set(e.pointerId,[e.clientX,e.clientY]);});
     canvas.addEventListener('pointermove',e=>{
