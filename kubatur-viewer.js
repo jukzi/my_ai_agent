@@ -45,6 +45,9 @@
       const a=1/3+2*t,b=1/3-t;
       return [[a,b],[b,a],[b,b]];
     })};
+  const edgeGauss=[.5-Math.sqrt(1/12),.5+Math.sqrt(1/12)];
+  cases.triangleBoundaryQuartic={...triangleOutline,negativePoints:[0,1,2],
+    points:[...triangleOutline.v,[1/3,1/3],...edgeGauss.flatMap(t=>[[t,0],[0,t],[t,1-t]])]};
   cases.triangleBoundaryCubic={...triangleOutline,
     points:[...triangleOutline.v,...cases.triangleEdges.points,[1/3,1/3]]};
   const quarticA=(Math.sqrt(10)-2)/9, quarticB=2/45-2*quarticA/15;
