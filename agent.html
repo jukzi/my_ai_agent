@@ -4573,6 +4573,7 @@
       try {
         for (let step = 1; (continuous || step <= maxSteps); step++) {
           if (controller.signal.aborted) break;
+          modelTimeMs = 0; // Only API attempts for this assistant message.
           const progress = continuous ? `Automatisch · Schritt ${step}` : `Schritt ${step}/${maxSteps}`;
           status(`${progress} · Warte auf ${state.config.model}…`);
 
