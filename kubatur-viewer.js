@@ -8,6 +8,9 @@
     return Array.from({length:64},()=>[next(),next()]);
   }
   const cases = {
+    oneCell: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]],points:[[.5,.5]]},
+    fourCells: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]], divisions:2,
+      points:[.25,.75].flatMap(x=>[.25,.75].map(y=>[x,y]))},
     randomSquare: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]],pointSize:3.5, grid:true,points:randomExample()},
     halton: {v:[[0,0],[1,0],[1,1],[0,1]],faces:[[0,1,2,3]],pointSize:3.5, grid:true,
       points:Array.from({length:64},(_,i)=>[radicalInverse(i+1,2),radicalInverse(i+1,3)])},
@@ -72,10 +75,11 @@
         for(const n of [1,16,64]){const [x,y]=project([(n-1)/63,0]);ctx.fillText(String(n),x,y+20);}
         ctx.fillText('Messungen',right[0]+48,right[1]+20);ctx.fillText('Relative Streuung',top[0]+58,top[1]-15);
       }
-      if(scene.grid){
+      if(scene.grid || scene.divisions){
+        const divisions=scene.divisions ?? 4;
         ctx.save();ctx.setLineDash([3,4]);ctx.strokeStyle='#327c81';ctx.lineWidth=1;ctx.beginPath();
-        for(let i=1;i<4;i++){
-          const a=i/4;
+        for(let i=1;i<divisions;i++){
+          const a=i/divisions;
           for(const [start,end] of [[[a,0],[a,1]],[[0,a],[1,a]]]){
             ctx.moveTo(...project(start).slice(0,2));ctx.lineTo(...project(end).slice(0,2));
           }
