@@ -3,8 +3,8 @@ import argparse
 from fractions import Fraction as F
 
 
-def optimal_allocation(bounds, budget):
-    """Return (bound, counts), with at least one point per ring."""
+def allocation_table(bounds, budget):
+    """Return optimal (bound, counts) for every feasible budget up to budget."""
     if not bounds or budget < len(bounds):
         raise ValueError('need at least one point per ring')
     best = {0: (F(0), ())}
@@ -15,7 +15,11 @@ def optimal_allocation(bounds, budget):
                    for used, (value, counts) in best.items() if used < b)
             for b in range(i, budget - len(bounds) + i + 1)
         }
-    return best[budget]
+    return best
+
+
+def optimal_allocation(bounds, budget):
+    return allocation_table(bounds, budget)[budget]
 
 
 def main(argv=None):
@@ -40,7 +44,8 @@ def main(argv=None):
                         raise ValueError('A must be nonnegative and p a positive integer')
                     terms.append((coefficient, exponent))
                 bounds.append(lambda n, terms=terms: min(a / n**p for a, p in terms))
-        value, counts = optimal_allocation(bounds, args.budget)
+        table = allocation_table(bounds, args.budget)
+        value, counts = table[args.budget]
         if args.target is not None:
             target = F(args.target)
             if target < 0:
@@ -52,11 +57,11 @@ def main(argv=None):
             # Each supplied bound is nonincreasing in the point count.
             while lo < hi:
                 mid = (lo + hi) // 2
-                if optimal_allocation(bounds, mid)[0] <= target:
+                if table[mid][0] <= target:
                     hi = mid
                 else:
                     lo = mid + 1
-            value, counts = optimal_allocation(bounds, lo)
+            value, counts = table[lo]
             print(f'Kleinstes Budget: {lo}')
     except (ValueError, ZeroDivisionError) as exc:
         parser.error(str(exc))
