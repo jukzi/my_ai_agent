@@ -70,6 +70,14 @@
       ...Array.from({length:4},(_,i)=>Array.from({length:3},(_,j)=>i===j?11/14:1/14)),
       ...[0,1,2,3].flatMap(i=>[0,1,2,3].filter(j=>j>i).map(j=>
         [0,1,2].map(k=>.25+(k===i||k===j?keastOffset:-keastOffset))))]};
+  const permutations4=([a,b,c,d])=>[a,b,c,d].flatMap((v,i,all)=>
+    all.filter((_,j)=>j!==i).flatMap((w,j,tail)=>{
+      const [x,y]=tail.filter((_,k)=>k!==j);return [[v,w,x,y],[v,w,y,x]];
+    }));
+  const orbit4=seed=>[...new Map(permutations4(seed).map(point=>[point.join(','),point])).values()];
+  cases.tetrahedronFaceOrbits={...cases.tetrahedron,
+    points:[[.25,.25,.25],...[ [1,0,0,0],[1/3,1/3,1/3,0],[.5,.25,.25,0] ].flatMap(orbit4).map(point=>point.slice(0,3))],
+    negativePoints:[5,6,7,8],pointSize:4};
   cases.tetrahedronCentroid={...cases.tetrahedron,points:[[.25,.25,.25]]};
   cases.cubeFaces={...cases.cube,points:[0,1,2].flatMap(axis=>[0,1].map(side=>[.5,.5,.5].map((v,i)=>i===axis?side:v)))};
   for (const host of document.querySelectorAll('[data-kubatur-viewer]')) {
@@ -140,7 +148,7 @@
         ctx.beginPath();trace(scene.curve);ctx.strokeStyle='#244ab5';ctx.lineWidth=3;ctx.stroke();
       }
       // Draw signed markers last so the negative symbol remains visible.
-      const markers=scene.points.map((point,i)=>({point,negative:i===scene.negativePoint}));
+      const markers=scene.points.map((point,i)=>({point,negative:i===scene.negativePoint || (scene.negativePoints?.includes(i) ?? false)}));
       markers.sort((a,b)=>Number(a.negative)-Number(b.negative));
       for(const {point,negative} of markers){
         const [x,y]=project(point), r=scene.pointSize??7;
