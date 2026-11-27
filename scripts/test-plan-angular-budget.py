@@ -9,6 +9,19 @@ allocate = runpy.run_path(str(Path(__file__).with_name('plan-angular-budget.py')
 
 
 class AllocationTest(unittest.TestCase):
+    def test_custom_cli(self):
+        from contextlib import redirect_stdout, redirect_stderr
+        from io import StringIO
+
+        main = runpy.run_path(str(Path(__file__).with_name('plan-angular-budget.py')))['main']
+        output = StringIO()
+        with redirect_stdout(output):
+            main(['--budget', '12', '--ring', '1:2', '10:4', '--ring', '1:4'])
+        self.assertIn('(7, 5); Schranke: 8651/1500625', output.getvalue())
+        with redirect_stderr(StringIO()), self.assertRaises(SystemExit) as error:
+            main(['--ring', '1:0'])
+        self.assertEqual(error.exception.code, 2)
+
     def test_switch_between_bounds(self):
         bounds = [lambda n: min(F(1, n**2), F(11**18, n**20)),
                   lambda n: F(2, 375*n**2)]
