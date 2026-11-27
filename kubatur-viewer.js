@@ -37,6 +37,11 @@
     triangle: {v:[[0,0],[1,0],[0,1]], faces:[[0,1,2]], points:[[1/6,1/6],[2/3,1/6],[1/6,2/3]]},
     tetrahedron: {v:[[0,0,0],[1,0,0],[0,1,0],[0,0,1]], faces:[[0,1,2],[0,1,3],[0,2,3],[1,2,3]], points:Array.from({length:4},(_,i)=>Array.from({length:3},(_,j)=>1/4+(i===j?3:-1)/(4*Math.sqrt(5))))}
   };
+  // Two roots of t² - t/12 - 1/80 = 0.
+  const shiftRoot=Math.sqrt((1/12)**2+1/20);
+  cases.tetrahedronPositiveCubic={...cases.tetrahedron,
+    points:[(1/12-shiftRoot)/2,(1/12+shiftRoot)/2].flatMap(t=>
+      Array.from({length:4},(_,i)=>Array.from({length:3},(_,j)=>1/4+(i===j?3:-1)*t)))};
   cases.tetrahedronSigned={...cases.tetrahedron,negativePoint:0,points:[[.25,.25,.25],
     ...Array.from({length:4},(_,i)=>Array.from({length:3},(_,j)=>i===j?1/2:1/6))]};
   cases.tetrahedronCentroid={...cases.tetrahedron,points:[[.25,.25,.25]]};
