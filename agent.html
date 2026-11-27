@@ -4593,7 +4593,6 @@
       try {
         for (let step = 1; (continuous || step <= maxSteps); step++) {
           if (controller.signal.aborted) break;
-          modelTimeMs = 0; // Only API attempts for this assistant message.
           const progress = continuous ? `Automatisch · Schritt ${step}` : `Schritt ${step}/${maxSteps}`;
           status(`${progress} · Warte auf ${state.config.model}…`);
 
@@ -4658,6 +4657,7 @@
           if (chat === activeChat) renderChat();
 
           if (!assistantEntry.tool_calls.length) {
+            modelTimeMs = 0; // The next reply starts a new timing window.
             if (!continuous || controller.signal.aborted) break;
             appendContinuation(chat);
             continue;
