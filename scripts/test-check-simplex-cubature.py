@@ -24,6 +24,17 @@ class SimplexCheckerTest(unittest.TestCase):
             self.assertEqual(main([str(path), '2', '5', '--tol', '1e-14']), 1)
         self.assertIn('Exponenten: (5, 0, 0)', output.getvalue())
 
+    def test_cartesian_reference_simplex(self):
+        rows = Path(__file__).with_name('strang5-barycentric.txt').read_text().splitlines()
+        table = '\n'.join(' '.join(row.split()[i] for i in (0, 1, 3)) for row in rows)
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(self.check(table, 2, 4, '--cartesian', '--tol', '1e-14'), 0)
+            self.assertEqual(self.check(table, 2, 5, '--cartesian', '--tol', '1e-14'), 1)
+            self.assertEqual(self.check('1/4 1/4 1/4 1', 3, 1, '--cartesian'), 0)
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            self.check('1/2 1/2 1', 2, 0, '--cartesian')
+        self.assertEqual(error.exception.code, 2)
+
     def test_triangle_exact_degree(self):
         table = '2/3 1/6 1/6 1/3\n1/6 2/3 1/6 1/3\n1/6 1/6 2/3 1/3\n'
         with redirect_stdout(io.StringIO()) as out:
