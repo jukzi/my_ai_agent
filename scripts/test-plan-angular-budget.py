@@ -22,6 +22,18 @@ class AllocationTest(unittest.TestCase):
             main(['--ring', '1:0'])
         self.assertEqual(error.exception.code, 2)
 
+    def test_target_cli(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+
+        main = runpy.run_path(str(Path(__file__).with_name('plan-angular-budget.py')))['main']
+        output = StringIO()
+        with redirect_stdout(output):
+            main(['--budget', '20', '--ring', '1:2', '--target', '1/16'])
+            self.assertEqual(main(['--budget', '3', '--ring', '1:2', '--target', '1/16']), 1)
+        self.assertIn('Kleinstes Budget: 4', output.getvalue())
+        self.assertIn('Keine Aufteilung', output.getvalue())
+
     def test_switch_between_bounds(self):
         bounds = [lambda n: min(F(1, n**2), F(11**18, n**20)),
                   lambda n: F(2, 375*n**2)]
