@@ -121,7 +121,17 @@
         ctx.beginPath();trace(scene.curve);const [x,y]=project([1,0]);ctx.lineTo(x,y);ctx.closePath();ctx.fillStyle='#2563eb24';if(!scene.noise)ctx.fill();
         ctx.beginPath();trace(scene.curve);ctx.strokeStyle='#244ab5';ctx.lineWidth=3;ctx.stroke();
       }
-      for(const [i,p] of scene.points.entries()){const [x,y]=project(p);ctx.beginPath();ctx.arc(x,y,scene.pointSize??7,0,2*Math.PI);ctx.fillStyle=i===scene.negativePoint?'#6941a5':'#d65b28';ctx.fill();ctx.strokeStyle='white';ctx.stroke();}
+      // Draw signed markers last so the negative symbol remains visible.
+      const markers=scene.points.map((point,i)=>({point,negative:i===scene.negativePoint}));
+      markers.sort((a,b)=>Number(a.negative)-Number(b.negative));
+      for(const {point,negative} of markers){
+        const [x,y]=project(point), r=scene.pointSize??7;
+        ctx.beginPath();
+        if(negative){ctx.moveTo(x,y-r-2);ctx.lineTo(x+r+2,y);ctx.lineTo(x,y+r+2);ctx.lineTo(x-r-2,y);ctx.closePath();}
+        else ctx.arc(x,y,r,0,2*Math.PI);
+        ctx.fillStyle=negative?'#6941a5':'#d65b28';ctx.fill();ctx.strokeStyle='white';ctx.lineWidth=1.5;ctx.stroke();
+        if(negative){ctx.beginPath();ctx.moveTo(x-3,y);ctx.lineTo(x+3,y);ctx.stroke();}
+      }
     }
     function magnify(f){zoom=Math.max(.3,Math.min(8,zoom*f));draw();}
     function button(label,icon,fn){const btn=document.createElement('button');btn.type='button';appearance(btn,label,icon);btn.addEventListener('click',fn);controls.append(btn);return btn;}
