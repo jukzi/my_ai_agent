@@ -1,5 +1,9 @@
 (() => {
+  const polarPoint=(r,a)=>[.5+r*Math.cos(a),.5+r*Math.sin(a)];
   const cases = {
+    disk: {v:[[0,0]], faces:[], rings:[.44], guides:[.44*2/3], points:[polarPoint(.44*2/3,Math.PI/5)], radiusLine:true},
+    annulus: {v:[[0,0]], faces:[], rings:[.44,.44*.9], guides:[.915,.95,.985].map(r=>r*.44), pointSize:2.3,
+      points:[.915,.95,.985].flatMap((r,j)=>Array.from({length:8},(_,i)=>polarPoint(.44*r,(i+j/3)*Math.PI/4)))},
     square: {v:[[0,0],[1,0],[1,1],[0,1]], faces:[[0,1,2,3]], points:[-1,1].flatMap(i=>[-1,1].map(j=>[.5+i/(2*Math.sqrt(3)),.5+j/(2*Math.sqrt(3))]))},
     cube: {v:[[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]], faces:[[0,1,2,3],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]], points:[-1,1].flatMap(i=>[-1,1].flatMap(j=>[-1,1].map(k=>[i,j,k].map(x=>.5+x/(2*Math.sqrt(3))))))},
     triangle: {v:[[0,0],[1,0],[0,1]], faces:[[0,1,2]], points:[[1/6,1/6],[2/3,1/6],[1/6,2/3]]},
@@ -25,12 +29,19 @@
     }
     function draw(){
       ctx.clearRect(0,0,640,420);
+      if(scene.rings){
+        const [cx,cy]=project([.5,.5]);
+        const circle=r=>{ctx.moveTo(cx+r*220*zoom,cy);ctx.arc(cx,cy,r*220*zoom,0,2*Math.PI);};
+        ctx.beginPath();scene.rings.forEach(circle);ctx.fillStyle='#5eead445';ctx.fill('evenodd');ctx.strokeStyle='#327c81';ctx.lineWidth=2;ctx.stroke();
+        ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle='#46888d';ctx.lineWidth=1;ctx.beginPath();scene.guides.forEach(circle);ctx.stroke();ctx.restore();
+        if(scene.radiusLine){const [x,y]=project(scene.points[0]);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.stroke();}
+      }
       const v=scene.v.map(project);
       const depth=f=>f.reduce((s,i)=>s+v[i][2],0)/f.length;
       for(const f of [...scene.faces].sort((l,r)=>depth(l)-depth(r))){
         ctx.beginPath(); f.forEach((i,j)=>j?ctx.lineTo(...v[i].slice(0,2)):ctx.moveTo(...v[i].slice(0,2)));ctx.closePath();ctx.fillStyle='#5eead445';ctx.fill();ctx.strokeStyle='#327c81';ctx.lineWidth=2;ctx.stroke();
       }
-      for(const p of scene.points){const [x,y]=project(p);ctx.beginPath();ctx.arc(x,y,7,0,2*Math.PI);ctx.fillStyle='#d65b28';ctx.fill();ctx.strokeStyle='white';ctx.stroke();}
+      for(const p of scene.points){const [x,y]=project(p);ctx.beginPath();ctx.arc(x,y,scene.pointSize??7,0,2*Math.PI);ctx.fillStyle='#d65b28';ctx.fill();ctx.strokeStyle='white';ctx.stroke();}
     }
     function magnify(f){zoom=Math.max(.3,Math.min(8,zoom*f));draw();}
     function button(label,icon,fn){const btn=document.createElement('button');btn.type='button';appearance(btn,label,icon);btn.addEventListener('click',fn);controls.append(btn);return btn;}
