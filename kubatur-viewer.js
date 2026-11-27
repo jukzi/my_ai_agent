@@ -47,6 +47,13 @@
     })};
   cases.triangleBoundaryCubic={...triangleOutline,
     points:[...triangleOutline.v,...cases.triangleEdges.points,[1/3,1/3]]};
+  const quarticA=(Math.sqrt(10)-2)/9, quarticB=2/45-2*quarticA/15;
+  const quarticDelta=Math.sqrt(quarticA**2+4*quarticB);
+  cases.triangleQuartic={...triangleOutline,
+    points:[(quarticA-quarticDelta)/2,(quarticA+quarticDelta)/2].flatMap(t=>{
+      const a=1/3+2*t,b=1/3-t;
+      return [[a,b],[b,a],[b,b]];
+    })};
   cases.triangleSigned={...triangleOutline,negativePoint:0,
     points:[[1/3,1/3],[3/5,1/5],[1/5,3/5],[1/5,1/5]]};
   cases.tetrahedronPositiveCubic={...cases.tetrahedron,
